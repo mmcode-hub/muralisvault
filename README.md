@@ -2,7 +2,7 @@
 
 A personal journal built with Hugo Extended **0.167.0** and Blowfish **v3.9.0**. The custom journal layer uses a white and navy palette, serif headings, and contextual section navigation. Theme source is a pinned Git submodule; customizations live outside it.
 
-Production address: https://mmcode-hub.github.io/muralisvault/
+Production address: https://muralisvault.in/
 
 ## Local preview
 
@@ -14,7 +14,7 @@ cd muralisvault
 hugo server
 ```
 
-Open the address printed by Hugo (including `/muralisvault/`). To see unpublished drafts, use `hugo server --buildDrafts`. The example travel entry is deliberately unpublished. Never use `--buildDrafts` for a production build.
+Open the address printed by Hugo. To see unpublished drafts, use `hugo server --buildDrafts`. The example travel entry is deliberately unpublished. Never use `--buildDrafts` for a production build.
 
 ## Write an entry
 
@@ -39,7 +39,7 @@ python3 scripts/check_site.py public
 
 For a clean build after deleting or renaming content, add `--cleanDestinationDir` (this replaces the generated `public/` output only). Do not check generated files into Git.
 
-Open a pull request. GitHub Actions builds and checks the production output on pull requests. After review and merge to `main`, the workflow builds again and deploys to GitHub Pages. In repository **Settings → Pages**, the build source must be **GitHub Actions**. The `github-pages` environment is used for deployments. No custom domain or secrets are required.
+Open a pull request. GitHub Actions builds and checks the production output on pull requests. After review and merge to `main`, the workflow builds again and deploys to GitHub Pages. In repository **Settings → Pages**, the build source must be **GitHub Actions** and the custom domain must be **muralisvault.in**. Keep Hugo's `baseURL` aligned with that domain so assets and navigation resolve from the site root. The `github-pages` environment is used for deployments. No secrets are required.
 
 The output check verifies internal links, assets, anchors, required sections, search URLs, XML feeds, and draft exclusion. Before changing layouts, also review the homepage, a section, an article with and without a photo, and the 404 page at desktop and mobile widths. Check keyboard navigation and search.
 
@@ -59,6 +59,6 @@ Custom templates live in `layouts/`; the theme continues to provide metadata, se
 
 ## Initial boundaries
 
-English only; no analytics, comments, contact form, CMS, or custom domain. No biography or travel claims are invented. All example content remains in drafts. This repository is exempt from Redmine and dev-playbook by owner instruction.
+English only; no analytics, comments, contact form, or CMS. No biography or travel claims are invented. All example content remains in drafts. This repository is exempt from Redmine and dev-playbook by owner instruction.
 
 The local search script is based on Blowfish v3.9.0 and adds paste/input handling, replay of the first query after index loading, and a no-results message. Compare it with the upstream script when upgrading the theme.
