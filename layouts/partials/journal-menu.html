@@ -1,4 +1,5 @@
 {{ $current := . }}
-{{ range site.Home.Sections.ByWeight }}
-<a href="{{ .RelPermalink }}" {{ if eq $current.RelPermalink .RelPermalink }}aria-current="page"{{ else if eq $current.Section .Section }}class="active-section"{{ end }}>{{ .Title }}</a>
-{{ end }}
+{{ range site.Home.Sections.ByWeight }}{{ $item := . }}
+{{ if .Sections }}<div class="nav-group"><a aria-haspopup="true" href="{{ .RelPermalink }}" {{ if eq $current.RelPermalink .RelPermalink }}aria-current="page"{{ else if eq $current.Section .Section }}class="active-section"{{ end }}>{{ .Title }}</a><div class="nav-sub">{{ range .Sections.ByWeight }}<a href="{{ .RelPermalink }}" {{ if eq $current.RelPermalink .RelPermalink }}aria-current="page"{{ end }}>{{ .Title }}</a>{{ end }}</div></div>
+{{ else }}<a href="{{ .RelPermalink }}" {{ if eq $current.RelPermalink .RelPermalink }}aria-current="page"{{ else if eq $current.Section .Section }}class="active-section"{{ end }}>{{ .Title }}</a>
+{{ end }}{{ end }}
