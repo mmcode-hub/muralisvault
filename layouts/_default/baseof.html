@@ -12,37 +12,10 @@
   </div>
 </header>
 <div class="page-shell {{ if .IsHome }}home-shell{{ end }}">
-  {{ if and (not .IsHome) .Section .FirstSection.Pages }}{{ partial "journal-sidebar.html" . }}{{ end }}
+  {{ if and (not .IsHome) .Section (ne .Section "about") }}{{ partial "journal-sidebar.html" . }}{{ end }}
   <main id="main-content" tabindex="-1">{{ block "main" . }}{{ end }}</main>
 </div>
 <footer class="site-footer"><span>© {{ now.Year }} {{ site.Params.author.name }} · {{ site.Title }}</span><div><a href="{{ "index.xml" | relURL }}">RSS</a><span>Built with <a href="https://gohugo.io/">Hugo</a> &amp; <a href="https://blowfish.page/">Blowfish</a></span></div></footer>
 {{ partial "search.html" . }}
-<script>
-(() => {
-  const groups = document.querySelectorAll(".desktop-nav .nav-group");
-  const touch = matchMedia("(hover: none)");
-  groups.forEach((g) => {
-    const link = g.querySelector(":scope > a");
-    link.addEventListener("click", (e) => {
-      if (!touch.matches || g.classList.contains("open")) return;
-      e.preventDefault();
-      groups.forEach((o) => o.classList.remove("open"));
-      g.classList.add("open");
-    });
-    g.addEventListener("mouseleave", () => g.classList.remove("dismissed"));
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
-    groups.forEach((g) => {
-      if (g.classList.contains("open") || g.matches(":hover") || g.contains(document.activeElement)) {
-        g.classList.remove("open");
-        g.classList.add("dismissed");
-        if (g.contains(document.activeElement)) g.querySelector(":scope > a").focus();
-      }
-    });
-  });
-  document.addEventListener("click", (e) => groups.forEach((g) => { if (!g.contains(e.target)) g.classList.remove("open"); }));
-})();
-</script>
 </body>
 </html>
