@@ -1,0 +1,4 @@
+{{ $current := . }}
+{{ range site.Home.Sections.ByWeight }}
+<a href="{{ .RelPermalink }}" {{ if eq $current.RelPermalink .RelPermalink }}aria-current="page"{{ else if eq $current.Section .Section }}class="active-section"{{ end }}>{{ .Title }}</a>
+{{ end }}

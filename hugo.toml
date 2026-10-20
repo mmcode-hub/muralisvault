@@ -1,0 +1,27 @@
+baseURL = "https://mmcode-hub.github.io/muralisvault/"
+locale = "en"
+defaultContentLanguage = "en"
+title = "Murali’s Vault"
+theme = "blowfish"
+enableRobotsTXT = true
+buildDrafts = false
+buildFuture = false
+summaryLength = 30
+disableKinds = ["taxonomy", "term"]
+[outputs]
+  home = ["HTML", "RSS", "JSON"]
+[params]
+  description = "A personal journal of work, travel, temple architecture and thoughts."
+  defaultAppearance = "light"
+  autoSwitchAppearance = false
+  enableSearch = true
+  disableImageZoom = true
+  mainSections = ["profession", "travel", "temple-architecture", "my-thoughts"]
+  [params.author]
+    name = "Murali"
+  [params.footer]
+    showScrollToTop = false
+  [params.article]
+    showDate = true
+[markup.goldmark.renderer]
+  unsafe = false

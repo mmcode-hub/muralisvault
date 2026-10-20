@@ -1,0 +1,5 @@
+{{ $current := .current }}
+{{ range .pages }}
+<a href="{{ .RelPermalink }}" {{ if eq .RelPermalink $current.RelPermalink }}aria-current="page"{{ end }}>{{ .Title }}</a>
+{{ if .IsSection }}{{ with .Pages }}<div class="nested-links">{{ partial "journal-section-tree.html" (dict "pages" .ByWeight "current" $current) }}</div>{{ end }}{{ end }}
+{{ end }}

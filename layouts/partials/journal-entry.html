@@ -1,0 +1,4 @@
+<article class="entry">
+{{ with .Resources.GetMatch (.Params.image | default "feature*") }}<img src="{{ .RelPermalink }}" alt="{{ $.Params.imageAlt | default "" }}" loading="lazy" width="{{ .Width }}" height="{{ .Height }}">{{ end }}
+<div><p class="eyebrow">{{ .Date.Format "January 2, 2006" }}</p><h2><a href="{{ .RelPermalink }}">{{ .Title }}</a></h2><p>{{ .Summary | plainify }}</p></div><span class="entry-arrow" aria-hidden="true">↗</span>
+</article>

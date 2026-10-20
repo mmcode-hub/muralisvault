@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" data-default-appearance="light" data-auto-appearance="false">
+{{ partial "head.html" . }}
+<body class="journal">
+<a class="skip-link" href="#main-content">Skip to content</a>
+<header class="site-header">
+  <a class="wordmark" href="{{ site.Home.RelPermalink }}">{{ site.Title }}</a>
+  <nav class="desktop-nav" aria-label="Main navigation">{{ partial "journal-menu.html" . }}</nav>
+  <div class="header-actions">
+    <button id="search-button" class="search-trigger" aria-label="Search the journal">{{ partial "icon.html" "search" }}<span>Search</span></button>
+    <details class="mobile-menu"><summary>Menu</summary><nav aria-label="Mobile main navigation">{{ partial "journal-menu.html" . }}</nav></details>
+  </div>
+</header>
+<div class="page-shell {{ if .IsHome }}home-shell{{ end }}">
+  {{ if and (not .IsHome) .Section }}{{ partial "journal-sidebar.html" . }}{{ end }}
+  <main id="main-content" tabindex="-1">{{ block "main" . }}{{ end }}</main>
+</div>
+<footer class="site-footer"><span>© {{ now.Year }} Murali · {{ site.Title }}</span><div><a href="{{ "index.xml" | relURL }}">RSS</a><span>Built with <a href="https://gohugo.io/">Hugo</a> &amp; <a href="https://blowfish.page/">Blowfish</a></span></div></footer>
+{{ partial "search.html" . }}
+</body>
+</html>
