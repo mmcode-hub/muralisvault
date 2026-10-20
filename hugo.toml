@@ -18,7 +18,7 @@ disableKinds = ["taxonomy", "term"]
   disableImageZoom = true
   mainSections = ["profession", "travel", "temple-architecture", "my-thoughts"]
   [params.author]
-    name = "Murali"
+    name = "Muralidharan"
   [params.footer]
     showScrollToTop = false
   [params.article]

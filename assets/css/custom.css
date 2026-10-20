@@ -1,10 +1,11 @@
 /* Journal overrides; Blowfish remains responsible for metadata and search. */
 :root {
-  --paper: #f7f4ee;
-  --ink: #292622;
-  --muted: #68615a;
-  --accent: #a3462b;
-  --line: #ded8ce;
+  --paper: #ffffff;
+  --ink: #1b2430;
+  --muted: #5b6573;
+  --accent: #1f4e79;
+  --line: #e1e5ea;
+  --tint: #f3f6f9;
   color-scheme: light;
 }
 html {
@@ -43,12 +44,12 @@ h2,
 h3,
 .wordmark {
   font-family: Georgia, "Times New Roman", serif;
-  font-weight: 400;
-  line-height: 1.15;
+  font-weight: 600;
+  line-height: 1.2;
 }
 h1 {
-  font-size: clamp(2.8rem, 5vw, 4.7rem);
-  letter-spacing: -0.045em;
+  font-size: clamp(2.4rem, 4.2vw, 3.4rem);
+  letter-spacing: -0.02em;
   margin: 14px 0 22px;
 }
 h2 {
@@ -87,14 +88,14 @@ h3 {
   color: var(--accent);
   font-size: 29px;
   white-space: nowrap;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.01em;
 }
 .desktop-nav {
   display: flex;
   align-items: center;
   gap: 26px;
   margin-left: auto;
-  font-size: 13px;
+  font-size: 14px;
 }
 .desktop-nav a {
   padding: 10px 0;
@@ -187,13 +188,14 @@ h3 {
   overflow: hidden;
 }
 .home-intro h1 {
-  font-size: clamp(3.5rem, 6.6vw, 6rem);
-  line-height: 1.03;
+  font-size: clamp(2.8rem, 5vw, 4rem);
+  line-height: 1.08;
   max-width: 800px;
 }
-.home-intro em {
+.home-intro .tagline {
+  font: 600 clamp(17px, 1.8vw, 20px)/1.5 Arial, Helvetica, sans-serif;
   color: var(--accent);
-  font-weight: 400;
+  margin: 0 0 18px;
 }
 .home-intro .intro-copy {
   max-width: 530px;
@@ -206,27 +208,6 @@ h3 {
   font-size: 14px;
   border-bottom: 1px solid var(--accent);
   padding-bottom: 4px;
-}
-.intro-mark {
-  position: absolute;
-  right: 36px;
-  top: 58px;
-  font:
-    170px/0.8 Georgia,
-    serif;
-  color: #dcd4c7;
-  letter-spacing: -0.12em;
-  transform: rotate(-8deg);
-  z-index: -0;
-  pointer-events: none;
-}
-.intro-mark span {
-  display: block;
-  margin: 0 0 0 65px;
-}
-.home-intro > :not(.intro-mark) {
-  position: relative;
-  z-index: 1;
 }
 .section-heading {
   display: flex;
@@ -253,7 +234,7 @@ h3 {
   transition: background 0.15s;
 }
 .section-card:hover {
-  background: #eee8de;
+  background: var(--tint);
   color: var(--ink);
 }
 .section-card h3 {
@@ -390,7 +371,7 @@ h3 {
   overflow: auto;
   padding: 20px;
   font: 14px/1.5 monospace;
-  background: #eee8de;
+  background: var(--tint);
 }
 .article-body table {
   display: block;
@@ -447,11 +428,6 @@ h3 {
     gap: 32px;
     grid-template-columns: 175px minmax(0, 1fr);
   }
-  .intro-mark {
-    font-size: 140px;
-    right: 10px;
-    opacity: 0.6;
-  }
   .home-intro .intro-copy {
     max-width: 470px;
   }
@@ -480,7 +456,7 @@ h3 {
     padding: 16px 24px;
     background: var(--paper);
     border: 1px solid var(--line);
-    box-shadow: 0 15px 25px #29262215;
+    box-shadow: 0 15px 25px #1b243015;
   }
   .mobile-menu nav a {
     padding: 10px 0;
@@ -512,10 +488,7 @@ h3 {
   .section-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  .intro-mark {
-    display: none;
-  }
-  .home-intro {
+    .home-intro {
     padding-top: 12px;
   }
   .home-intro .intro-copy {
@@ -534,7 +507,8 @@ h3 {
     margin-bottom: 60px;
   }
   .home-intro h1 {
-    font-size: 51px;
+    font-size: 38px;
+    overflow-wrap: anywhere;
   }
   .section-heading {
     align-items: flex-start;
@@ -598,4 +572,41 @@ h3 {
   .section-card {
     transition: none;
   }
+}
+
+.nav-group {
+  position: relative;
+}
+.desktop-nav .nav-group > a::after {
+  content: " ▾" / "";
+  font-size: 10px;
+}
+.nav-sub {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: -16px;
+  min-width: 230px;
+  flex-direction: column;
+  padding: 8px 0;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 24px #1b243014;
+  z-index: 30;
+}
+.nav-group:hover:not(.dismissed) .nav-sub,
+.nav-group:focus-within:not(.dismissed) .nav-sub,
+.nav-group.open .nav-sub {
+  display: flex;
+}
+.desktop-nav .nav-sub a {
+  padding: 9px 20px;
+  box-shadow: none;
+}
+.mobile-menu .nav-sub {
+  display: flex;
+  position: static;
+  border: 0;
+  box-shadow: none;
+  padding: 0 0 0 16px;
 }

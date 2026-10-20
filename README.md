@@ -1,6 +1,6 @@
 # Murali’s Vault
 
-A personal journal built with Hugo Extended **0.167.0** and Blowfish **v3.9.0**. The custom journal layer uses ivory, terracotta, serif headings, and contextual section navigation. Theme source is a pinned Git submodule; customizations live outside it.
+A personal journal built with Hugo Extended **0.167.0** and Blowfish **v3.9.0**. The custom journal layer uses a white and navy palette, serif headings, and contextual section navigation. Theme source is a pinned Git submodule; customizations live outside it.
 
 Production address: https://mmcode-hub.github.io/muralisvault/
 

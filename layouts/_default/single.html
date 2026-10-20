@@ -1,5 +1,5 @@
 {{ define "main" }}
-<article><header class="page-intro"><p class="eyebrow">{{ .FirstSection.Title }}{{ if .Draft }} · Draft preview{{ end }}</p><h1>{{ .Title }}</h1><p class="intro-copy">{{ .Description | default .Params.summary }}</p><p class="article-meta">{{ .Date.Format "January 2, 2006" }} · Murali</p></header>
+<article><header class="page-intro"><p class="eyebrow">{{ .FirstSection.Title }}{{ if .Draft }} · Draft preview{{ end }}</p><h1>{{ .Title }}</h1><p class="intro-copy">{{ .Description | default .Params.summary }}</p><p class="article-meta">{{ .Date.Format "January 2, 2006" }} · {{ site.Params.author.name }}</p></header>
 {{ with .Resources.GetMatch (.Params.image | default "feature*") }}<figure class="article-image"><img src="{{ .RelPermalink }}" alt="{{ $.Params.imageAlt | default "" }}" width="{{ .Width }}" height="{{ .Height }}">{{ with $.Params.imageCaption }}<figcaption>{{ . }}</figcaption>{{ end }}</figure>{{ end }}
 <div class="article-body">{{ .Content }}</div><a class="text-link back-link" href="{{ .Parent.RelPermalink }}">← Back to {{ .Parent.Title }}</a></article>
 {{ end }}

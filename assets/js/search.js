@@ -1,4 +1,5 @@
-// Based on Blowfish v3.9.0 (MIT). Local changes: input/paste events, async first query, empty-state feedback.
+// Based on Blowfish v3.9.0 (MIT). Local changes: input/paste events, async first query, empty-state feedback,
+// escaped results, single index request with error feedback.
 var fuse;
 var showButton = document.getElementById("search-button");
 var showButtonMobile = document.getElementById("search-button-mobile");
@@ -11,6 +12,7 @@ var first = output.firstChild;
 var last = output.lastChild;
 var searchVisible = false;
 var indexed = false;
+var indexing = false;
 var hasResults = false;
 var previouslyFocused = null;
 
@@ -115,6 +117,9 @@ document.addEventListener("keydown", function (event) {
 
   // Enter to get to results
   if (event.key == "Enter") {
+    if (searchVisible && document.activeElement == input) {
+      event.preventDefault();
+    }
     if (searchVisible && hasResults) {
       event.preventDefault();
       if (document.activeElement == input) {
@@ -165,13 +170,20 @@ function hideSearch() {
   }
 }
 
-function fetchJSON(path, callback) {
+function fetchJSON(path, callback, onError) {
   var httpRequest = new XMLHttpRequest();
   httpRequest.onreadystatechange = function () {
     if (httpRequest.readyState === 4) {
       if (httpRequest.status === 200) {
-        var data = JSON.parse(httpRequest.responseText);
+        try {
+          var data = JSON.parse(httpRequest.responseText);
+        } catch (e) {
+          if (onError) onError();
+          return;
+        }
         if (callback) callback(data);
+      } else if (onError) {
+        onError();
       }
     }
   };
@@ -179,7 +191,33 @@ function fetchJSON(path, callback) {
   httpRequest.send();
 }
 
+function escapeHTML(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function toPlainText(html) {
+  return (
+    new DOMParser().parseFromString(html || "", "text/html").body
+      .textContent || ""
+  );
+}
+
+function showStatus(message) {
+  output.innerHTML =
+    '<li role="status" class="p-4">' + escapeHTML(message) + "</li>";
+  hasResults = false;
+}
+
 function buildIndex() {
+  if (indexing) {
+    return;
+  }
+  indexing = true;
   var baseURL = wrapper.getAttribute("data-url");
   baseURL = baseURL.replace(/\/?$/, "/");
   fetchJSON(baseURL + "index.json", function (data) {
@@ -203,13 +241,24 @@ function buildIndex() {
     }*/
     fuse = new Fuse(data, options);
     indexed = true;
+    indexing = false;
     if (searchVisible && input.value.trim()) executeQuery(input.value);
+  }, function () {
+    indexing = false;
+    if (searchVisible && input.value.trim()) {
+      showStatus("Search is unavailable right now. Please try again.");
+    }
   });
 }
 
 function executeQuery(term) {
   if (!indexed) {
     buildIndex();
+  }
+  if (!term.trim()) {
+    output.innerHTML = "";
+    hasResults = false;
+    return;
   }
   if (!fuse) {
     return;
@@ -219,19 +268,18 @@ function executeQuery(term) {
 
   if (results.length > 0) {
     results.forEach(function (value, key) {
-      var html = value.item.summary;
-      var div = document.createElement("div");
-      div.innerHTML = html;
-      value.item.summary = div.textContent || div.innerText || "";
+      var summary = escapeHTML(toPlainText(value.item.summary));
       var title = value.item.externalUrl
-        ? value.item.title +
+        ? escapeHTML(value.item.title) +
           '<span class="text-xs ml-2 align-center cursor-default text-neutral-400 dark:text-neutral-500">' +
-          value.item.externalUrl +
+          escapeHTML(value.item.externalUrl) +
           "</span>"
-        : value.item.title;
+        : escapeHTML(value.item.title);
       var linkconfig = value.item.externalUrl
-        ? 'target="_blank" rel="noopener" href="' + value.item.externalUrl + '"'
-        : 'href="' + value.item.permalink + '"';
+        ? 'target="_blank" rel="noopener" href="' +
+          escapeHTML(value.item.externalUrl) +
+          '"'
+        : 'href="' + escapeHTML(value.item.permalink) + '"';
       resultsHTML =
         resultsHTML +
         `<li class="mb-2">
@@ -241,8 +289,8 @@ function executeQuery(term) {
               <div class="-mb-1 text-lg font-bold">
                 ${title}
               </div>
-              <div class="text-sm text-neutral-500 dark:text-neutral-400">${value.item.section}<span class="px-2 text-primary-500">&middot;</span>${value.item.date ? value.item.date : ""}</span></div>
-              <div class="text-sm italic">${value.item.summary}</div>
+              <div class="text-sm text-neutral-500 dark:text-neutral-400">${escapeHTML(value.item.section)}<span class="px-2 text-primary-500">&middot;</span>${value.item.date ? escapeHTML(value.item.date) : ""}</span></div>
+              <div class="text-sm italic">${summary}</div>
             </div>
             <div class="ml-2 ltr:block rtl:hidden text-neutral-500">&rarr;</div>
             <div class="mr-2 ltr:hidden rtl:block text-neutral-500">&larr;</div>
