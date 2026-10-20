@@ -1,0 +1,4 @@
+<nav aria-label="{{ .root.Title }} navigation">
+<a href="{{ .root.RelPermalink }}" {{ if eq .root.RelPermalink .current.RelPermalink }}aria-current="page"{{ end }}>Overview</a>
+{{ partial "journal-section-tree.html" (dict "pages" .root.Pages.ByWeight "current" .current) }}
+</nav>

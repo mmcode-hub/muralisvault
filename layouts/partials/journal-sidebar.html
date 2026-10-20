@@ -1,0 +1,5 @@
+{{ $root := .FirstSection }}
+<aside class="section-sidebar" aria-label="Section navigation">
+  <div class="desktop-section"><p class="eyebrow">Explore</p>{{ partial "journal-section-links.html" (dict "root" $root "current" .) }}</div>
+  <details class="mobile-section"><summary>Explore {{ $root.Title }}</summary>{{ partial "journal-section-links.html" (dict "root" $root "current" .) }}</details>
+</aside>
