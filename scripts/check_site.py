@@ -62,7 +62,10 @@ for path, page in pages.items():
 
 for required in ('about', 'profession', 'travel', 'temple-architecture', 'my-thoughts',
                  'temple-architecture/temple-stories', 'temple-architecture/places',
-                 'temple-architecture/architectural-elements'):
+                 'temple-architecture/architectural-elements',
+                 'profession/teaching', 'profession/research', 'profession/python-community',
+                 'profession/publications', 'travel/india', 'travel/international',
+                 'my-thoughts/reflections', 'my-thoughts/education', 'my-thoughts/technology'):
     if not (root / required / 'index.html').is_file():
         errors.append(f'Missing section: {required}')
 
