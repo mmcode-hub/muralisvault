@@ -1,0 +1,21 @@
+{
+  "name": "muralis-blog-studio",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "blog-studio": "./cli.mjs"
+  },
+  "scripts": {
+    "build": "node ./node_modules/vite/bin/vite.js build",
+    "start": "npm run build && node server.mjs",
+    "test": "node --test test/**/*.test.mjs"
+  },
+  "dependencies": {
+    "@blocknote/core": "^0.56.0",
+    "@blocknote/mantine": "^0.56.0",
+    "@blocknote/react": "^0.56.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "vite": "^7.1.7"
+  }
+}

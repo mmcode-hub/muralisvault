@@ -30,6 +30,18 @@ For a photo, place a JPEG, PNG, or WebP alongside `index.md`, set `image: "photo
 
 The About biography can be added as Markdown in `content/about/_index.md`. Set `showEmptyState: false` there once a biography has been added. Landing-page summaries and titles are also edited in each section’s `_index.md` file. Navigation is generated from published content; set `weight` to control its order. The top-level section order is already configured.
 
+## Blog Studio (local editor)
+
+Blog Studio is a local-only writing interface for new and existing journal entries. It writes the same Hugo page bundles used by this repository, previews them with Hugo, runs the production checks, and can create and merge a GitHub pull request through the locally authenticated GitHub CLI. Use the Write tab for rich text, Markdown for Hugo embeds, and Preview after saving to inspect the rendered page. The Studio warns before leaving an entry with unsaved changes.
+
+Run the Studio from the repository root:
+
+```sh
+npm run blog-studio
+```
+
+The first launch installs the Studio's dependencies and downloads a checksum-verified Hugo Extended 0.167.0 into the Studio's private runtime folder; it does not use or change your system Hugo installation. Open `http://127.0.0.1:4174`, then select **Connect GitHub** in the Studio when you are ready to publish. It starts GitHub CLI's browser/device authorization flow and keeps the credential in GitHub CLI's credential store, never in the browser. The Hugo preview runs at `http://127.0.0.1:1313`. It is deliberately bound to localhost.
+
 ## Check and publish
 
 ```sh

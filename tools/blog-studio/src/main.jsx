@@ -1,0 +1,210 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { useCreateBlockNote } from '@blocknote/react';
+import { BlockNoteView } from '@blocknote/mantine';
+import '@blocknote/core/fonts/inter.css';
+import '@blocknote/mantine/style.css';
+import './style.css';
+import './ux.css';
+
+const sections = [
+  ['profession', 'Profession'], ['travel', 'Travel'], ['my-thoughts', 'My Thoughts'],
+  ['temple-architecture/temple-stories', 'Temple stories'],
+  ['temple-architecture/places', 'Temple places'],
+  ['temple-architecture/architectural-elements', 'Architectural elements'],
+];
+const emptyPost = () => ({ title: '', summary: '', section: 'profession', slug: '', date: new Date().toISOString().slice(0, 10), draft: true, image: '', imageAlt: '', imageCaption: '', body: '' });
+const slugify = (value) => value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
+const api = async (url, options = {}) => { const response = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Request failed'); return result; };
+const readFile = (file) => new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
+const previewUrl = (post) => `http://127.0.0.1:1313/${post.section}/${post.slug}/`;
+
+function Studio() {
+  const editor = useCreateBlockNote();
+  const [posts, setPosts] = useState([]);
+  const [post, setPost] = useState(emptyPost);
+  const [cover, setCover] = useState(null);
+  const [inlineFiles, setInlineFiles] = useState([]);
+  const [status, setStatus] = useState(null);
+  const [activeTab, setActiveTab] = useState('write');
+  const [sourceMode, setSourceMode] = useState(false);
+  const [sourceText, setSourceText] = useState('');
+  const [dirty, setDirty] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [message, setMessage] = useState({ text: 'Start a new entry or select one from the library.', type: 'hint' });
+  const [query, setQuery] = useState('');
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [log, setLog] = useState('');
+  const loadingEditor = useRef(false);
+  const slugEdited = useRef(false);
+  const previousAuthOutput = useRef('');
+
+  const notify = (text, type = 'info') => setMessage({ text, type });
+  const fail = (error) => notify(error.message || String(error), 'error');
+  const refreshPosts = async () => setPosts((await api('/api/posts')).posts);
+  const refreshStatus = async () => {
+    const next = await api('/api/status'); setStatus(next);
+    if (next.github?.output && next.github.output !== previousAuthOutput.current) {
+      previousAuthOutput.current = next.github.output; setLog(next.github.output); setLogOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    refreshPosts().catch(fail); refreshStatus().catch(fail);
+    const timer = setInterval(() => refreshStatus().catch(() => {}), 8000);
+    const beforeUnload = (event) => { if (dirty) { event.preventDefault(); event.returnValue = ''; } };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => { clearInterval(timer); window.removeEventListener('beforeunload', beforeUnload); };
+  }, [dirty]);
+
+  const confirmLeave = () => !dirty || window.confirm('You have unsaved changes. Discard them?');
+  const markDirty = () => { setDirty(true); setVerified(false); };
+  const setField = (key, value) => { setPost((current) => ({ ...current, [key]: value })); markDirty(); };
+  const setTitle = (value) => { setPost((current) => ({ ...current, title: value, slug: !current.path && !slugEdited.current ? slugify(value) : current.slug })); markDirty(); };
+  const installBody = async (body) => {
+    loadingEditor.current = true;
+    const hasShortcodes = /{{[<%]/.test(body || '');
+    setSourceMode(hasShortcodes);
+    setSourceText(body || '');
+    if (!hasShortcodes) {
+      const blocks = await editor.tryParseMarkdownToBlocks(body || '');
+      editor.replaceBlocks(editor.document, blocks.length ? blocks : [{ type: 'paragraph', content: '' }]);
+    }
+    queueMicrotask(() => { loadingEditor.current = false; });
+  };
+  const selectPost = async (path) => {
+    if (!confirmLeave()) return;
+    try {
+      const selected = (await api(`/api/posts?path=${encodeURIComponent(path)}`)).posts[0];
+      await installBody(selected.body);
+      setPost(selected); setCover(null); setInlineFiles([]); setDirty(false); setVerified(false); setActiveTab('write'); setLibraryOpen(false);
+      slugEdited.current = true; notify(`Opened ${selected.title}.`, 'hint');
+    } catch (error) { fail(error); }
+  };
+  const newPost = async () => {
+    if (!confirmLeave()) return;
+    await installBody(''); setPost(emptyPost()); setCover(null); setInlineFiles([]); setDirty(false); setVerified(false); setActiveTab('write'); setLibraryOpen(false);
+    slugEdited.current = false; notify('A new entry is ready. Give it a title and start writing.', 'hint');
+  };
+  const switchToSource = async () => {
+    if (!sourceMode) { setSourceText(editor.blocksToMarkdownLossy(editor.document)); setSourceMode(true); }
+    setActiveTab('source');
+  };
+  const switchToWrite = async () => {
+    if (sourceMode) {
+      if (/{{[<%]/.test(sourceText)) { notify('This post contains Hugo embeds. Edit its Markdown in Source to preserve them.', 'hint'); setActiveTab('source'); return; }
+      loadingEditor.current = true;
+      const blocks = await editor.tryParseMarkdownToBlocks(sourceText);
+      editor.replaceBlocks(editor.document, blocks.length ? blocks : [{ type: 'paragraph', content: '' }]);
+      queueMicrotask(() => { loadingEditor.current = false; });
+      setSourceMode(false);
+    }
+    setActiveTab('write');
+  };
+  const formatBlock = (type, props) => {
+    editor.updateBlock(editor.getTextCursorPosition().block, { type, ...(props ? { props } : {}) });
+    markDirty(); editor.focus();
+  };
+  const toggleStyle = (style) => { editor.toggleStyles({ [style]: true }); markDirty(); editor.focus(); };
+  const insertEmbed = (kind) => {
+    const currentBody = sourceMode ? sourceText : editor.blocksToMarkdownLossy(editor.document);
+    if (kind === 'youtube') {
+      const raw = window.prompt('Paste a YouTube link'); if (!raw) return;
+      let id = '';
+      try { const url = new URL(raw); id = url.hostname === 'youtu.be' ? url.pathname.slice(1) : url.searchParams.get('v') || url.pathname.split('/').filter(Boolean).at(-1); } catch { /* handled below */ }
+      if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return notify('Enter a valid YouTube video link.', 'error');
+      setSourceText(`${currentBody.trim()}\n\n{{< youtubeLite id="${id}" >}}\n`);
+    } else {
+      const raw = window.prompt('Paste a direct HTTPS video file link'); if (!raw) return;
+      try { if (new URL(raw).protocol !== 'https:') throw new Error(); } catch { return notify('Enter a direct HTTPS video link.', 'error'); }
+      setSourceText(`${currentBody.trim()}\n\n{{< video src="${raw.replaceAll('"', '%22')}" >}}\n`);
+    }
+    setSourceMode(true); setActiveTab('source'); markDirty();
+    notify('Media embed inserted in Markdown. Save to see it on the Hugo preview.', 'info');
+  };
+  const addInlineImage = async (file) => {
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return notify('Choose a JPEG, PNG, or WebP image.', 'error');
+    const alt = window.prompt('Describe this image for readers using a screen reader');
+    if (!alt?.trim()) return notify('An image description is required.', 'error');
+    setInlineFiles((current) => [...current, { file, alt: alt.trim() }]);
+    const current = sourceMode ? sourceText : editor.blocksToMarkdownLossy(editor.document);
+    setSourceText(`${current.trim()}\n\n{{< figure src="${file.name}" alt="${alt.trim().replaceAll('"', '\\"')}" >}}\n`);
+    setSourceMode(true); setActiveTab('source'); markDirty();
+    notify('Image added to the page bundle. Save to see it in the Hugo preview.', 'info');
+  };
+  const save = async () => {
+    if (!post.title.trim() || !post.summary.trim() || !post.slug.trim()) return notify('Add a title, summary, and slug before saving.', 'error');
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(post.slug)) return notify('The slug can contain lowercase letters, numbers, and hyphens.', 'error');
+    if (cover && !post.imageAlt.trim()) return notify('Add alternative text for the cover image.', 'error');
+    try {
+      setBusy('Saving');
+      const assets = [];
+      if (cover) assets.push({ name: cover.name, content: await readFile(cover) });
+      for (const entry of inlineFiles) assets.push({ name: entry.file.name, content: await readFile(entry.file) });
+      const body = sourceMode ? sourceText : editor.blocksToMarkdownLossy(editor.document);
+      const saved = await api('/api/posts', { method: 'POST', body: JSON.stringify({ ...post, body, image: cover?.name || post.image, assets, existingPath: post.path }) });
+      setPost((current) => ({ ...current, ...saved, body, image: cover?.name || current.image }));
+      setCover(null); setInlineFiles([]); setDirty(false); setVerified(false);
+      await refreshPosts(); notify('Saved locally. Open Preview to inspect the page, then verify the production build.', 'success');
+    } catch (error) { fail(error); } finally { setBusy(''); }
+  };
+  const validate = async () => {
+    if (dirty) return notify('Save your changes before verification.', 'error');
+    try { setBusy('Verifying'); const result = await api('/api/validate', { method: 'POST', body: '{}' }); setVerified(true); setLog(result.output); notify('Production checks passed. This entry is ready for a pull request.', 'success'); }
+    catch (error) { setVerified(false); setLog(error.message); setLogOpen(true); fail(error); } finally { setBusy(''); }
+  };
+  const publish = async () => {
+    if (!verified || dirty) return notify('Save and verify the latest changes first.', 'error');
+    try { setBusy('Creating PR'); const result = await api('/api/publish', { method: 'POST', body: JSON.stringify(post) }); setPost((current) => ({ ...current, pr: result.pr })); notify(`Pull request #${result.pr.number} created. GitHub Actions will check it before merge.`, 'success'); }
+    catch (error) { fail(error); } finally { setBusy(''); }
+  };
+  const merge = async () => {
+    try { setBusy('Merging'); const result = await api('/api/merge', { method: 'POST', body: JSON.stringify(post.pr) }); setPost((current) => ({ ...current, pr: null })); setVerified(false); notify(result.output, 'success'); await refreshPosts(); }
+    catch (error) { fail(error); } finally { setBusy(''); }
+  };
+  const login = async () => { try { await api('/api/github/login', { method: 'POST', body: '{}' }); setLogOpen(true); notify('Follow the GitHub device instructions below to finish connecting.', 'info'); await refreshStatus(); } catch (error) { fail(error); } };
+  const visiblePosts = posts.filter((item) => `${item.title} ${item.section}`.toLowerCase().includes(query.toLowerCase()));
+  const hasSaved = Boolean(post.path); const canVerify = hasSaved && !dirty && !busy;
+  const canPublish = canVerify && verified && !post.pr && status?.github?.authenticated;
+  const preview = hasSaved && !dirty;
+
+  return <div className="studio-shell">
+    <aside className={`sidebar ${libraryOpen ? 'library-open' : ''}`} aria-label="Post library">
+      <div className="brand"><span className="brand-mark">M</span><div><strong>Murali’s Vault</strong><small>Writing studio</small></div></div>
+      <button className="new-post" onClick={newPost}><span>＋</span> New entry</button>
+      <button className="mobile-library-toggle" aria-expanded={libraryOpen} onClick={() => setLibraryOpen((open) => !open)}>Entries ({posts.length}) {libraryOpen ? '⌃' : '⌄'}</button>
+      <div className="library-heading"><span>Your entries <b>{posts.length}</b></span><button title="Refresh entries" aria-label="Refresh entries" onClick={() => refreshPosts().catch(fail)}>↻</button></div>
+      <input className="library-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search entries…" aria-label="Search entries" />
+      <nav className="library">{visiblePosts.length ? visiblePosts.map((item) => <button key={item.path} className={`library-item ${item.path === post.path ? 'selected' : ''}`} onClick={() => selectPost(item.path)}><strong>{item.title}</strong><span>{sections.find(([value]) => value === item.section)?.[1] || item.section} · {item.draft ? 'Draft' : 'Published'}</span></button>) : <p className="library-empty">{query ? 'No matching entries' : 'No entries yet'}</p>}</nav>
+      <div className="sidebar-footer"><div className="connection"><span className={`dot ${status?.github?.authenticated ? 'connected' : ''}`} /><span>{status?.github?.authenticated ? status.github.account : status?.github?.running ? 'Connecting…' : 'GitHub disconnected'}</span></div><button className="connect" onClick={login} disabled={status?.github?.running}>{status?.github?.authenticated ? 'Reconnect GitHub' : 'Connect GitHub'} →</button></div>
+    </aside>
+    <main className="workspace">
+      <header className="topbar"><div className="topbar-title">Blog Studio <span>/</span> {hasSaved ? post.title : 'New entry'}</div><div className="topbar-status"><span className={`save-dot ${dirty ? 'unsaved' : !hasSaved ? 'empty' : ''}`} />{dirty ? 'Unsaved changes' : hasSaved ? 'Saved locally' : 'Not saved yet'}</div></header>
+      <div className="workspace-inner">
+        {!status?.ready && status && <div className="setup-note"><strong>Publishing setup</strong><span>{status.problems.join(' · ')}</span>{!status.github?.authenticated && <button onClick={login}>Connect GitHub</button>}</div>}
+        <div className="page-heading"><div><p className="eyebrow">{hasSaved ? (post.draft ? 'DRAFT ENTRY' : 'PUBLISHABLE ENTRY') : 'NEW ENTRY'}</p><h1>{post.title || 'Create an entry'}</h1><p>Write, preview, verify, and send your story for publication.</p></div><button className="preview-link" onClick={() => setActiveTab('preview')} disabled={!preview}>Preview page ↗</button></div>
+        <div className={`message ${message.type}`} role="status">{message.text}</div>
+        <div className="studio-grid">
+          <section className="composer" aria-label="Entry editor">
+            <div className="entry-fields"><label>Title<input autoFocus value={post.title} onChange={(event) => setTitle(event.target.value)} placeholder="Give this story a title" /></label><label>Summary<textarea value={post.summary} onChange={(event) => setField('summary', event.target.value)} placeholder="One or two sentences for the homepage and search results" maxLength={260} /></label><small>{post.summary.length}/260 characters</small></div>
+            <div className="editor-tabs" role="tablist" aria-label="Editor view"><button role="tab" aria-selected={activeTab === 'write'} onClick={switchToWrite}>Write</button><button role="tab" aria-selected={activeTab === 'preview'} disabled={!preview} onClick={() => setActiveTab('preview')}>Preview</button><button role="tab" aria-selected={activeTab === 'source'} onClick={switchToSource}>Markdown</button></div>
+            {activeTab === 'write' && !sourceMode && <div className="format-toolbar" role="toolbar" aria-label="Text formatting" onMouseDown={(event) => event.preventDefault()}><button title="Heading" onClick={() => formatBlock('heading', { level: 2 })}>H2</button><button title="Bold" onClick={() => toggleStyle('bold')}><b>B</b></button><button title="Italic" onClick={() => toggleStyle('italic')}><i>I</i></button><span className="toolbar-divider" /><button title="Bulleted list" onClick={() => formatBlock('bulletListItem')}>☷ List</button><button title="Numbered list" onClick={() => formatBlock('numberedListItem')}>1. List</button><button title="Quote" onClick={() => formatBlock('quote')}>“ Quote</button></div>}
+            <div className="editor-content">{activeTab === 'preview' ? <div className="preview-pane"><div className="preview-bar"><span>{previewUrl(post)}</span><a href={previewUrl(post)} target="_blank" rel="noreferrer">Open in new tab ↗</a></div><iframe title="Hugo page preview" src={previewUrl(post)} /></div> : activeTab === 'source' || sourceMode ? <div className="source-pane"><p>Hugo embeds stay intact in Markdown. Save to render them in the page preview.</p><textarea aria-label="Article Markdown" value={sourceText} onChange={(event) => { setSourceText(event.target.value); markDirty(); }} spellCheck="false" /></div> : <div className="rich-editor"><div className="rich-tip">Type <kbd>/</kbd> for blocks, or select text to format it.</div><BlockNoteView editor={editor} theme="light" onChange={() => { if (!loadingEditor.current) markDirty(); }} /></div>}</div>
+            <div className="composer-footer"><span>{sourceMode ? 'Markdown with Hugo embeds' : 'Rich text saved as Markdown'}</span><div><label className="small-upload">＋ Add image<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { addInlineImage(event.target.files?.[0]); event.target.value = ''; }} /></label><button onClick={() => insertEmbed('youtube')}>＋ YouTube</button><button onClick={() => insertEmbed('video')}>＋ Video</button></div></div>
+          </section>
+          <aside className="inspector" aria-label="Entry settings"><section><div className="panel-heading"><h2>Entry settings</h2><span>01</span></div><label>Section<select value={post.section} disabled={hasSaved} onChange={(event) => setField('section', event.target.value)}>{sections.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>URL slug<input value={post.slug} disabled={hasSaved} onChange={(event) => { slugEdited.current = true; setField('slug', event.target.value); }} placeholder="story-url" /></label><label>Date<input type="date" value={post.date} onChange={(event) => setField('date', event.target.value)} /></label><label className="check-row"><input type="checkbox" checked={post.draft} onChange={(event) => setField('draft', event.target.checked)} /><span><strong>Keep as draft</strong><small>It stays hidden after merge</small></span></label></section>
+            <section><div className="panel-heading"><h2>Cover image</h2><span>02</span></div><label className="cover-upload"><span>＋ Choose JPEG, PNG or WebP</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { setCover(event.target.files?.[0] || null); markDirty(); }} /></label>{(cover || post.image) && <p className="image-name">{cover?.name || post.image}</p>}<label>Image description<input value={post.imageAlt || ''} onChange={(event) => setField('imageAlt', event.target.value)} placeholder="Describe what the image shows" /></label><label>Caption <span className="optional">optional</span><input value={post.imageCaption || ''} onChange={(event) => setField('imageCaption', event.target.value)} placeholder="Credit or context" /></label></section>
+            <section className="workflow-card"><div className="panel-heading"><h2>Publish workflow</h2><span>03</span></div><ol><li className={hasSaved && !dirty ? 'done' : ''}>Save the entry</li><li className={verified && !dirty ? 'done' : ''}>Verify the site</li><li className={post.pr ? 'done' : ''}>Review the pull request</li></ol>{post.pr && <a href={post.pr.url} target="_blank" rel="noreferrer">Open PR #{post.pr.number} ↗</a>}</section>
+          </aside>
+        </div>
+        <div className="action-bar"><div className="action-context">{busy ? `${busy}…` : dirty ? 'Save changes before preview or verification' : post.pr ? `Pull request #${post.pr.number} is open` : verified ? 'Production checks passed' : hasSaved ? 'Saved locally; verify when ready' : 'Your entry starts locally'}</div><div className="action-buttons"><button className="primary" onClick={save} disabled={Boolean(busy)}>{busy === 'Saving' ? 'Saving…' : dirty || !hasSaved ? 'Save entry' : 'Save again'}</button><button onClick={validate} disabled={!canVerify}>Verify</button><button onClick={publish} disabled={!canPublish}>Create PR</button><button onClick={merge} disabled={!post.pr || Boolean(busy)}>Merge PR</button></div></div>
+        {logOpen && <section className="activity"><div><h2>Activity</h2><button onClick={() => setLogOpen(false)}>Hide</button></div><pre>{log || 'Waiting for GitHub…'}</pre></section>}{!logOpen && log && <button className="show-activity" onClick={() => setLogOpen(true)}>Show activity log</button>}
+      </div>
+    </main>
+  </div>;
+}
+
+createRoot(document.querySelector('#app')).render(<Studio />);

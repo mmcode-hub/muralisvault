@@ -2,3 +2,6 @@
 /resources/_gen/
 /.hugo_build.lock
 /node_modules/
+/tools/blog-studio/node_modules/
+/tools/blog-studio/dist/
+/tools/blog-studio/.runtime/

@@ -1,0 +1,9 @@
+{
+  "name": "muralis-vault",
+  "private": true,
+  "scripts": {
+    "blog-studio": "node tools/blog-studio/cli.mjs",
+    "blog-studio:build": "npm --prefix tools/blog-studio run build",
+    "blog-studio:test": "npm --prefix tools/blog-studio test"
+  }
+}
