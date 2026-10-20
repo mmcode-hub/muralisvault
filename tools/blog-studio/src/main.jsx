@@ -18,6 +18,11 @@ const slugify = (value) => value.toLowerCase().normalize('NFKD').replace(/[\u030
 const api = async (url, options = {}) => { const response = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Request failed'); return result; };
 const readFile = (file) => new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
 const previewUrl = (post) => `http://127.0.0.1:1313/${post.section}/${post.slug}/`;
+const writingStats = (body) => {
+  const plain = body.replace(/{{[<%][\s\S]*?[%>]}}/g, ' ').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').replace(/\[[^\]]*\]\([^)]*\)/g, ' ').replace(/[#*_`>~-]/g, ' ');
+  const words = plain.trim().match(/\S+/g)?.length || 0;
+  return { words, minutes: Math.max(1, Math.ceil(words / 220)) };
+};
 
 function Studio() {
   const editor = useCreateBlockNote();
@@ -29,6 +34,9 @@ function Studio() {
   const [activeTab, setActiveTab] = useState('write');
   const [sourceMode, setSourceMode] = useState(false);
   const [sourceText, setSourceText] = useState('');
+  const [editorMarkdown, setEditorMarkdown] = useState('');
+  const [focusMode, setFocusMode] = useState(false);
+  const [coverPreview, setCoverPreview] = useState('');
   const [dirty, setDirty] = useState(false);
   const [verified, setVerified] = useState(false);
   const [busy, setBusy] = useState('');
@@ -40,6 +48,13 @@ function Studio() {
   const loadingEditor = useRef(false);
   const slugEdited = useRef(false);
   const previousAuthOutput = useRef('');
+
+  useEffect(() => {
+    if (!cover) { setCoverPreview(''); return; }
+    const url = URL.createObjectURL(cover);
+    setCoverPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [cover]);
 
   const notify = (text, type = 'info') => setMessage({ text, type });
   const fail = (error) => notify(error.message || String(error), 'error');
@@ -68,6 +83,7 @@ function Studio() {
     const hasShortcodes = /{{[<%]/.test(body || '');
     setSourceMode(hasShortcodes);
     setSourceText(body || '');
+    setEditorMarkdown(body || '');
     if (!hasShortcodes) {
       const blocks = await editor.tryParseMarkdownToBlocks(body || '');
       editor.replaceBlocks(editor.document, blocks.length ? blocks : [{ type: 'paragraph', content: '' }]);
@@ -89,7 +105,7 @@ function Studio() {
     slugEdited.current = false; notify('A new entry is ready. Give it a title and start writing.', 'hint');
   };
   const switchToSource = async () => {
-    if (!sourceMode) { setSourceText(editor.blocksToMarkdownLossy(editor.document)); setSourceMode(true); }
+    if (!sourceMode) { const markdown = editor.blocksToMarkdownLossy(editor.document); setEditorMarkdown(markdown); setSourceText(markdown); setSourceMode(true); }
     setActiveTab('source');
   };
   const switchToWrite = async () => {
@@ -98,6 +114,7 @@ function Studio() {
       loadingEditor.current = true;
       const blocks = await editor.tryParseMarkdownToBlocks(sourceText);
       editor.replaceBlocks(editor.document, blocks.length ? blocks : [{ type: 'paragraph', content: '' }]);
+      setEditorMarkdown(sourceText);
       queueMicrotask(() => { loadingEditor.current = false; });
       setSourceMode(false);
     }
@@ -108,6 +125,14 @@ function Studio() {
     markDirty(); editor.focus();
   };
   const toggleStyle = (style) => { editor.toggleStyles({ [style]: true }); markDirty(); editor.focus(); };
+  const addLink = () => {
+    const raw = window.prompt('Paste a link (https:// or mailto:)');
+    if (!raw) return;
+    let url;
+    try { url = new URL(raw); } catch { return notify('Enter a valid link.', 'error'); }
+    if (!['https:', 'http:', 'mailto:'].includes(url.protocol)) return notify('Use an HTTP, HTTPS, or email link.', 'error');
+    editor.createLink(url.href); markDirty(); editor.focus();
+  };
   const insertEmbed = (kind) => {
     const currentBody = sourceMode ? sourceText : editor.blocksToMarkdownLossy(editor.document);
     if (kind === 'youtube') {
@@ -151,6 +176,13 @@ function Studio() {
       await refreshPosts(); notify('Saved locally. Open Preview to inspect the page, then verify the production build.', 'success');
     } catch (error) { fail(error); } finally { setBusy(''); }
   };
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (!busy) save(); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
   const validate = async () => {
     if (dirty) return notify('Save your changes before verification.', 'error');
     try { setBusy('Verifying'); const result = await api('/api/validate', { method: 'POST', body: '{}' }); setVerified(true); setLog(result.output); notify('Production checks passed. This entry is ready for a pull request.', 'success'); }
@@ -170,8 +202,9 @@ function Studio() {
   const hasSaved = Boolean(post.path); const canVerify = hasSaved && !dirty && !busy;
   const canPublish = canVerify && verified && !post.pr && status?.github?.authenticated;
   const preview = hasSaved && !dirty;
+  const stats = writingStats(sourceMode ? sourceText : editorMarkdown);
 
-  return <div className="studio-shell">
+  return <div className={`studio-shell ${focusMode ? 'focus-mode' : ''}`}>
     <aside className={`sidebar ${libraryOpen ? 'library-open' : ''}`} aria-label="Post library">
       <div className="brand"><span className="brand-mark">M</span><div><strong>Murali’s Vault</strong><small>Writing studio</small></div></div>
       <button className="new-post" onClick={newPost}><span>＋</span> New entry</button>
@@ -182,7 +215,7 @@ function Studio() {
       <div className="sidebar-footer"><div className="connection"><span className={`dot ${status?.github?.authenticated ? 'connected' : ''}`} /><span>{status?.github?.authenticated ? status.github.account : status?.github?.running ? 'Connecting…' : 'GitHub disconnected'}</span></div><button className="connect" onClick={login} disabled={status?.github?.running}>{status?.github?.authenticated ? 'Reconnect GitHub' : 'Connect GitHub'} →</button></div>
     </aside>
     <main className="workspace">
-      <header className="topbar"><div className="topbar-title">Blog Studio <span>/</span> {hasSaved ? post.title : 'New entry'}</div><div className="topbar-status"><span className={`save-dot ${dirty ? 'unsaved' : !hasSaved ? 'empty' : ''}`} />{dirty ? 'Unsaved changes' : hasSaved ? 'Saved locally' : 'Not saved yet'}</div></header>
+      <header className="topbar"><div className="topbar-title">Blog Studio <span>/</span> {hasSaved ? post.title : 'New entry'}</div><div className="topbar-tools"><button className="focus-toggle" onClick={() => setFocusMode((value) => !value)} aria-pressed={focusMode}>{focusMode ? 'Exit focus' : 'Focus mode'}</button><div className="topbar-status"><span className={`save-dot ${dirty ? 'unsaved' : !hasSaved ? 'empty' : ''}`} />{dirty ? 'Unsaved changes' : hasSaved ? 'Saved locally' : 'Not saved yet'}</div></div></header>
       <div className="workspace-inner">
         {!status?.ready && status && <div className="setup-note"><strong>Publishing setup</strong><span>{status.problems.join(' · ')}</span>{!status.github?.authenticated && <button onClick={login}>Connect GitHub</button>}</div>}
         <div className="page-heading"><div><p className="eyebrow">{hasSaved ? (post.draft ? 'DRAFT ENTRY' : 'PUBLISHABLE ENTRY') : 'NEW ENTRY'}</p><h1>{post.title || 'Create an entry'}</h1><p>Write, preview, verify, and send your story for publication.</p></div><button className="preview-link" onClick={() => setActiveTab('preview')} disabled={!preview}>Preview page ↗</button></div>
@@ -191,12 +224,12 @@ function Studio() {
           <section className="composer" aria-label="Entry editor">
             <div className="entry-fields"><label>Title<input autoFocus value={post.title} onChange={(event) => setTitle(event.target.value)} placeholder="Give this story a title" /></label><label>Summary<textarea value={post.summary} onChange={(event) => setField('summary', event.target.value)} placeholder="One or two sentences for the homepage and search results" maxLength={260} /></label><small>{post.summary.length}/260 characters</small></div>
             <div className="editor-tabs" role="tablist" aria-label="Editor view"><button role="tab" aria-selected={activeTab === 'write'} onClick={switchToWrite}>Write</button><button role="tab" aria-selected={activeTab === 'preview'} disabled={!preview} onClick={() => setActiveTab('preview')}>Preview</button><button role="tab" aria-selected={activeTab === 'source'} onClick={switchToSource}>Markdown</button></div>
-            {activeTab === 'write' && !sourceMode && <div className="format-toolbar" role="toolbar" aria-label="Text formatting" onMouseDown={(event) => event.preventDefault()}><button title="Heading" onClick={() => formatBlock('heading', { level: 2 })}>H2</button><button title="Bold" onClick={() => toggleStyle('bold')}><b>B</b></button><button title="Italic" onClick={() => toggleStyle('italic')}><i>I</i></button><span className="toolbar-divider" /><button title="Bulleted list" onClick={() => formatBlock('bulletListItem')}>☷ List</button><button title="Numbered list" onClick={() => formatBlock('numberedListItem')}>1. List</button><button title="Quote" onClick={() => formatBlock('quote')}>“ Quote</button></div>}
-            <div className="editor-content">{activeTab === 'preview' ? <div className="preview-pane"><div className="preview-bar"><span>{previewUrl(post)}</span><a href={previewUrl(post)} target="_blank" rel="noreferrer">Open in new tab ↗</a></div><iframe title="Hugo page preview" src={previewUrl(post)} /></div> : activeTab === 'source' || sourceMode ? <div className="source-pane"><p>Hugo embeds stay intact in Markdown. Save to render them in the page preview.</p><textarea aria-label="Article Markdown" value={sourceText} onChange={(event) => { setSourceText(event.target.value); markDirty(); }} spellCheck="false" /></div> : <div className="rich-editor"><div className="rich-tip">Type <kbd>/</kbd> for blocks, or select text to format it.</div><BlockNoteView editor={editor} theme="light" onChange={() => { if (!loadingEditor.current) markDirty(); }} /></div>}</div>
-            <div className="composer-footer"><span>{sourceMode ? 'Markdown with Hugo embeds' : 'Rich text saved as Markdown'}</span><div><label className="small-upload">＋ Add image<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { addInlineImage(event.target.files?.[0]); event.target.value = ''; }} /></label><button onClick={() => insertEmbed('youtube')}>＋ YouTube</button><button onClick={() => insertEmbed('video')}>＋ Video</button></div></div>
+            {activeTab === 'write' && !sourceMode && <div className="format-toolbar" role="toolbar" aria-label="Text formatting" onMouseDown={(event) => { if (event.target.closest('button')) event.preventDefault(); }}><div className="toolbar-group"><button title="Paragraph" aria-label="Paragraph" onClick={() => formatBlock('paragraph')}>Text</button><button title="Heading 2" aria-label="Heading 2" onClick={() => formatBlock('heading', { level: 2 })}>H2</button><button title="Heading 3" aria-label="Heading 3" onClick={() => formatBlock('heading', { level: 3 })}>H3</button></div><span className="toolbar-divider" /><div className="toolbar-group"><button title="Bold" aria-label="Bold" onClick={() => toggleStyle('bold')}><b>B</b></button><button title="Italic" aria-label="Italic" onClick={() => toggleStyle('italic')}><i>I</i></button><button title="Strikethrough" aria-label="Strikethrough" onClick={() => toggleStyle('strike')}><s>S</s></button><button title="Inline code" aria-label="Inline code" onClick={() => toggleStyle('code')}><code>&lt;/&gt;</code></button><button title="Insert link" aria-label="Insert link" onClick={addLink}>Link</button></div><span className="toolbar-divider" /><div className="toolbar-group"><button title="Bulleted list" onClick={() => formatBlock('bulletListItem')}>• List</button><button title="Numbered list" onClick={() => formatBlock('numberedListItem')}>1. List</button><button title="Quote" onClick={() => formatBlock('quote')}>“ Quote</button></div><span className="toolbar-spacer" /><div className="toolbar-group"><button title="Undo" aria-label="Undo" onClick={() => editor.undo()}>↶</button><button title="Redo" aria-label="Redo" onClick={() => editor.redo()}>↷</button></div></div>}
+            <div className="editor-content">{activeTab === 'preview' ? <div className="preview-pane"><div className="preview-bar"><span>{previewUrl(post)}</span><a href={previewUrl(post)} target="_blank" rel="noreferrer">Open in new tab ↗</a></div><iframe title="Hugo page preview" src={previewUrl(post)} /></div> : activeTab === 'source' || sourceMode ? <div className="source-pane"><p>Hugo embeds stay intact in Markdown. Save to render them in the page preview.</p><textarea aria-label="Article Markdown" value={sourceText} onChange={(event) => { setSourceText(event.target.value); markDirty(); }} spellCheck="false" /></div> : <div className="rich-editor"><div className="rich-tip">Type <kbd>/</kbd> for blocks, or select text to format it.</div><BlockNoteView editor={editor} theme="light" onChange={() => { if (!loadingEditor.current) { setEditorMarkdown(editor.blocksToMarkdownLossy(editor.document)); markDirty(); } }} /></div>}</div>
+            <div className="composer-footer"><span>{stats.words} {stats.words === 1 ? 'word' : 'words'} · {stats.minutes} min read <span className="footer-hint">· {sourceMode ? 'Markdown with Hugo embeds' : 'Ctrl/⌘ + S to save'}</span></span><div><label className="small-upload">＋ Add image<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { addInlineImage(event.target.files?.[0]); event.target.value = ''; }} /></label><button onClick={() => insertEmbed('youtube')}>＋ YouTube</button><button onClick={() => insertEmbed('video')}>＋ Video</button></div></div>
           </section>
           <aside className="inspector" aria-label="Entry settings"><section><div className="panel-heading"><h2>Entry settings</h2><span>01</span></div><label>Section<select value={post.section} disabled={hasSaved} onChange={(event) => setField('section', event.target.value)}>{sections.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>URL slug<input value={post.slug} disabled={hasSaved} onChange={(event) => { slugEdited.current = true; setField('slug', event.target.value); }} placeholder="story-url" /></label><label>Date<input type="date" value={post.date} onChange={(event) => setField('date', event.target.value)} /></label><label className="check-row"><input type="checkbox" checked={post.draft} onChange={(event) => setField('draft', event.target.checked)} /><span><strong>Keep as draft</strong><small>It stays hidden after merge</small></span></label></section>
-            <section><div className="panel-heading"><h2>Cover image</h2><span>02</span></div><label className="cover-upload"><span>＋ Choose JPEG, PNG or WebP</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { setCover(event.target.files?.[0] || null); markDirty(); }} /></label>{(cover || post.image) && <p className="image-name">{cover?.name || post.image}</p>}<label>Image description<input value={post.imageAlt || ''} onChange={(event) => setField('imageAlt', event.target.value)} placeholder="Describe what the image shows" /></label><label>Caption <span className="optional">optional</span><input value={post.imageCaption || ''} onChange={(event) => setField('imageCaption', event.target.value)} placeholder="Credit or context" /></label></section>
+            <section><div className="panel-heading"><h2>Cover image</h2><span>02</span></div>{coverPreview && <img className="cover-preview" src={coverPreview} alt="Selected cover preview" />}<label className="cover-upload"><span>＋ Choose JPEG, PNG or WebP</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { setCover(event.target.files?.[0] || null); markDirty(); }} /></label>{(cover || post.image) && <p className="image-name">{cover?.name || post.image}</p>}<label>Image description<input value={post.imageAlt || ''} onChange={(event) => setField('imageAlt', event.target.value)} placeholder="Describe what the image shows" /></label><label>Caption <span className="optional">optional</span><input value={post.imageCaption || ''} onChange={(event) => setField('imageCaption', event.target.value)} placeholder="Credit or context" /></label></section>
             <section className="workflow-card"><div className="panel-heading"><h2>Publish workflow</h2><span>03</span></div><ol><li className={hasSaved && !dirty ? 'done' : ''}>Save the entry</li><li className={verified && !dirty ? 'done' : ''}>Verify the site</li><li className={post.pr ? 'done' : ''}>Review the pull request</li></ol>{post.pr && <a href={post.pr.url} target="_blank" rel="noreferrer">Open PR #{post.pr.number} ↗</a>}</section>
           </aside>
         </div>

@@ -32,7 +32,7 @@ The About biography can be added as Markdown in `content/about/_index.md`. Set `
 
 ## Blog Studio (local editor)
 
-Blog Studio is a local-only writing interface for new and existing journal entries. It writes the same Hugo page bundles used by this repository, previews them with Hugo, runs the production checks, and can create and merge a GitHub pull request through the locally authenticated GitHub CLI. Use the Write tab for rich text, Markdown for Hugo embeds, and Preview after saving to inspect the rendered page. The Studio warns before leaving an entry with unsaved changes.
+Blog Studio is a local-only writing interface for new and existing journal entries. It writes the same Hugo page bundles used by this repository, previews them with Hugo, runs the production checks, and can create and merge a GitHub pull request through the locally authenticated GitHub CLI. Use the Write tab for rich text and its formatting toolbar, Markdown for Hugo embeds, and Preview after saving to inspect the rendered page. Focus mode gives the editor more room; the footer shows word count and estimated reading time. Press Ctrl/⌘ + S to save. The Studio warns before leaving an entry with unsaved changes.
 
 Run the Studio from the repository root:
 

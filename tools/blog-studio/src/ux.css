@@ -1,13 +1,34 @@
 .save-dot.empty{background:#aebbc4}
 .mobile-library-toggle{display:none}
-.format-toolbar{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:9px 30px;border-bottom:1px solid #e9eef1;background:#fcfdfd}
+.topbar-tools{display:flex;align-items:center;gap:19px}
+.focus-toggle{border:1px solid #d5e0e7;border-radius:6px;background:#fff;color:#37566b;padding:7px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+.focus-toggle:hover,.focus-toggle[aria-pressed=true]{background:#eaf1f5;border-color:#b8cbd7}
+.format-toolbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:9px 24px;border-bottom:1px solid #e9eef1;background:#fcfdfd}
+.toolbar-group{display:flex;align-items:center;gap:2px}
+.toolbar-spacer{flex:1}
 .format-toolbar button{min-height:30px;padding:5px 9px;border:1px solid transparent;border-radius:5px;background:transparent;color:#3c5b70;font-size:12px;font-weight:700}
 .format-toolbar button:hover,.format-toolbar button:focus-visible{border-color:#d4e0e7;background:#edf3f6}
+.format-toolbar code{font-size:11px}
 .toolbar-divider{width:1px;height:20px;margin:0 5px;background:#dbe4e9}
+.cover-preview{display:block;width:100%;max-height:180px;margin-bottom:12px;object-fit:cover;border-radius:7px;border:1px solid #e0e7eb}
+.focus-mode{grid-template-columns:minmax(0,1fr)}
+.focus-mode .sidebar,.focus-mode .inspector,.focus-mode .setup-note,.focus-mode .workflow-card{display:none}
+.focus-mode .workspace-inner{max-width:960px}
+.focus-mode .studio-grid{display:block}
+.focus-mode .composer{box-shadow:0 12px 45px #102a4310}
+.focus-mode .editor-content{min-height:58vh}
+.focus-mode .rich-editor{padding-left:clamp(28px,5vw,80px);padding-right:clamp(28px,5vw,80px)}
+.focus-mode .bn-editor{min-height:50vh}
+@media(max-width:1100px){.footer-hint{display:none}}
 @media(max-width:800px){
   .mobile-library-toggle{display:block;width:100%;margin-top:8px;padding:9px 11px;border:1px solid #3d576e;border-radius:7px;background:#223b51;color:#dfeaf1;text-align:left;font-size:12px;font-weight:700}
   .sidebar.library-open .library-heading{display:flex;margin-top:18px}
   .sidebar.library-open .library-search{display:block}
   .sidebar.library-open .library{display:flex;max-height:150px;margin-bottom:0}
   .sidebar-footer{position:static;margin-top:13px;padding-top:10px;border-top:1px solid #395064}
+  .format-toolbar{padding:8px 14px}
+}
+@media(max-width:560px){
+  .topbar-tools{gap:8px}.focus-toggle{font-size:11px;padding:6px 7px}.topbar-status{font-size:0}.topbar-status .save-dot{width:9px;height:9px}
+  .toolbar-divider{display:none}.toolbar-spacer{display:none}.format-toolbar{gap:2px}.format-toolbar button{padding:5px 7px}
 }
