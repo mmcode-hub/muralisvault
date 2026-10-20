@@ -1,4 +1,4 @@
-"""Check the generated site, including its GitHub Pages subpath and draft boundary."""
+"""Check the generated site, including its configured deployment path and draft boundary."""
 import json
 import sys
 import tomllib
