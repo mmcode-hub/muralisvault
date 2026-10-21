@@ -13,7 +13,8 @@ const trashDir = join(toolDir, '.runtime', 'trash');
 const requiredHugo = '0.167.0';
 const hugoBin = process.env.BLOG_STUDIO_HUGO || 'hugo';
 const host = '127.0.0.1';
-const port = 4174;
+const port = Number(process.env.BLOG_STUDIO_PORT) || 4174;
+const previewPort = 1314;
 const sections = new Set(['profession', 'travel', 'my-thoughts', 'temple-architecture/temple-stories', 'temple-architecture/places', 'temple-architecture/architectural-elements']);
 let hugoProcess;
 let authState = { running: false, output: '', completed: false };
@@ -140,8 +141,24 @@ function beginGithubLogin() {
 
 function startHugo() {
   if (!isHugoReady()) return;
-  hugoProcess = spawn(hugoBin, ['server', '--buildDrafts', '--port', '1313', '--bind', host], { cwd: repoDir, shell: false, stdio: 'ignore' });
+  hugoProcess = spawn(hugoBin, ['server', '--buildDrafts', '--disableFastRender', '--port', String(previewPort), '--bind', host], { cwd: repoDir, shell: false, stdio: 'ignore' });
   hugoProcess.on('exit', () => { hugoProcess = undefined; });
+}
+
+async function previewPage(section, slug) {
+  const source = postPath(section, slug);
+  if (!existsSync(source)) throw new Error('Save this entry before previewing it.');
+  if (!hugoProcess) throw new Error('Draft preview is unavailable. Restart Blog Studio and try again.');
+  const target = `http://${host}:${previewPort}/${section}/${slug}/`;
+  const rendered = join(repoDir, 'public', section, slug, 'index.html');
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    try {
+      const response = await fetch(target);
+      if (response.ok && existsSync(rendered) && statSync(rendered).mtimeMs >= statSync(source).mtimeMs) return { url: `${target}?studio=${Date.now()}` };
+    } catch { /* Wait for the local Hugo server. */ }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 250));
+  }
+  throw new Error('Draft preview is unavailable. Restart Blog Studio and try again.');
 }
 
 async function readJson(request) {
@@ -234,6 +251,7 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/status') return send(response, 200, status());
     if (request.method === 'GET' && url.pathname === '/api/posts') return send(response, 200, { posts: url.searchParams.get('path') ? [readPost(url.searchParams.get('path'))] : listPosts() });
     if (request.method === 'GET' && url.pathname === '/api/deleted') return send(response, 200, { posts: listDeleted() });
+    if (request.method === 'GET' && url.pathname === '/api/preview') return send(response, 200, await previewPage(url.searchParams.get('section'), url.searchParams.get('slug')));
     if (request.method === 'POST' && url.pathname === '/api/posts') return send(response, 201, await savePost(await readJson(request)));
     if (request.method === 'DELETE' && url.pathname === '/api/posts') return send(response, 200, deletePost((await readJson(request)).path));
     if (request.method === 'POST' && url.pathname === '/api/posts/restore') return send(response, 200, restorePost((await readJson(request)).trashId));

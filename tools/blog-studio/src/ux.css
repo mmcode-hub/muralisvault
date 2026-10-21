@@ -1,6 +1,9 @@
 .save-dot.empty{background:#aebbc4}
 .mobile-library-toggle{display:none}
 .topbar-tools{display:flex;align-items:center;gap:19px}
+.editor-tab-switch{display:flex;gap:21px}
+.editor-tabs .external-preview{margin-left:auto;color:#315775;white-space:nowrap}
+.editor-tabs .external-preview:hover{color:#a76d28}
 .focus-toggle{border:1px solid #d5e0e7;border-radius:6px;background:#fff;color:#37566b;padding:7px 10px;font-size:12px;font-weight:700;white-space:nowrap}
 .focus-toggle:hover,.focus-toggle[aria-pressed=true]{background:#eaf1f5;border-color:#b8cbd7}
 .format-toolbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:9px 24px;border-bottom:1px solid #e9eef1;background:#fcfdfd}
@@ -20,8 +23,26 @@
 .deleted-pane h2{margin:18px 0 4px;color:#22394d;font:700 24px Georgia,serif}
 .deleted-pane p{max-width:470px;color:#687d8d;font-size:13px;line-height:1.6}
 .deleted-pane button{margin-top:8px;border:1px solid #bcced8;border-radius:6px;background:#fff;color:#31546c;padding:9px 14px;font-size:12px;font-weight:750}
-.action-buttons button.danger{border-color:#e9cbc8;color:#a4443c}
-.action-buttons button.danger:hover{background:#fff2f0}
+.entry-management{border-color:#eadedc!important;background:#fffdfc!important}
+.entry-management h2{margin:0;color:#5d3d3a;font:700 17px Georgia,serif}
+.entry-management p{margin:8px 0 12px;color:#806e6a;font-size:12px;line-height:1.5}
+.entry-management button{padding:8px 11px;border:1px solid #e0b9b5;border-radius:6px;background:#fff;color:#9a453e;font-size:12px;font-weight:750}
+.entry-management button:hover{background:#fff0ee}
+.studio-dialog{width:min(430px,calc(100vw - 30px));max-height:calc(100vh - 30px);padding:0;border:1px solid #dfe6ea;border-radius:14px;background:#fff;color:#20384d;box-shadow:0 22px 75px #122b3c45}
+.studio-dialog::backdrop{background:#0b2232a8;backdrop-filter:blur(3px)}
+.studio-dialog form{padding:27px}
+.dialog-symbol{display:grid;place-items:center;width:39px;height:39px;border-radius:10px;background:#e7f0f4;color:#315c72;font-size:22px;font-weight:700}
+.dialog-symbol.danger{background:#fff0ed;color:#a4473e}
+.studio-dialog h2{margin:17px 0 7px;font:700 24px Georgia,serif;color:#1e3549}
+.studio-dialog p{margin:0 0 20px;color:#627786;font-size:13px;line-height:1.6}
+.studio-dialog label{display:block;color:#536b7b;font-size:12px;font-weight:750}
+.studio-dialog input{display:block;width:100%;margin-top:7px;padding:11px 12px;border:1px solid #cddbe3;border-radius:7px;outline:none;color:#20384d;background:#fff;font-size:14px;font-weight:500}
+.studio-dialog input:focus{border-color:#a67538;box-shadow:0 0 0 3px #d9ad722e}
+.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:24px}
+.dialog-actions button{padding:10px 14px;border:1px solid #cedce4;border-radius:7px;background:#fff;color:#34566d;font-size:12px;font-weight:750}
+.dialog-actions .dialog-primary{border-color:#173a55;background:#173a55;color:#fff}
+.dialog-actions .dialog-danger{border-color:#a4473e;background:#a4473e;color:#fff}
+.dialog-actions button:disabled{opacity:.48}
 .focus-mode{grid-template-columns:minmax(0,1fr)}
 .focus-mode .sidebar,.focus-mode .inspector,.focus-mode .setup-note,.focus-mode .workflow-card{display:none}
 .focus-mode .workspace-inner{max-width:960px}
@@ -43,5 +64,6 @@
 }
 @media(max-width:560px){
   .topbar-tools{gap:8px}.focus-toggle{font-size:11px;padding:6px 7px}.topbar-status{font-size:0}.topbar-status .save-dot{width:9px;height:9px}
+  .editor-tabs{gap:8px}.editor-tab-switch{gap:16px}.editor-tabs .external-preview{font-size:11px}
   .toolbar-divider{display:none}.toolbar-spacer{display:none}.format-toolbar{gap:2px}.format-toolbar button{padding:5px 7px}
 }

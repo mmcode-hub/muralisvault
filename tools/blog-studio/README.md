@@ -18,7 +18,7 @@ Open **http://127.0.0.1:4174**. The first run installs the editor dependencies a
 
 1. Select **New entry** or open an entry from the library.
 2. Write in **Write**; use **Markdown** for Hugo embeds. Add a title, summary, and any images.
-3. Select **Save entry**, then **Preview** to inspect the page.
+3. Select **Preview page** to save current changes and open the rendered page in a new browser tab. Drafts appear there too.
 4. Select **Verify** to check the production build.
 5. To publish, select **Connect GitHub** and complete the browser/device sign-in. Then select **Create PR**. Review the pull request before selecting **Merge PR**.
 
