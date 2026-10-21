@@ -27,6 +27,7 @@ const writingStats = (body) => {
 function Studio() {
   const editor = useCreateBlockNote();
   const [posts, setPosts] = useState([]);
+  const [deletedPosts, setDeletedPosts] = useState([]);
   const [post, setPost] = useState(emptyPost);
   const [cover, setCover] = useState(null);
   const [inlineFiles, setInlineFiles] = useState([]);
@@ -59,6 +60,7 @@ function Studio() {
   const notify = (text, type = 'info') => setMessage({ text, type });
   const fail = (error) => notify(error.message || String(error), 'error');
   const refreshPosts = async () => setPosts((await api('/api/posts')).posts);
+  const refreshDeleted = async () => setDeletedPosts((await api('/api/deleted')).posts);
   const refreshStatus = async () => {
     const next = await api('/api/status'); setStatus(next);
     if (next.github?.output && next.github.output !== previousAuthOutput.current) {
@@ -67,7 +69,7 @@ function Studio() {
   };
 
   useEffect(() => {
-    refreshPosts().catch(fail); refreshStatus().catch(fail);
+    refreshPosts().catch(fail); refreshDeleted().catch(fail); refreshStatus().catch(fail);
     const timer = setInterval(() => refreshStatus().catch(() => {}), 8000);
     const beforeUnload = (event) => { if (dirty) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('beforeunload', beforeUnload);
@@ -103,6 +105,11 @@ function Studio() {
     if (!confirmLeave()) return;
     await installBody(''); setPost(emptyPost()); setCover(null); setInlineFiles([]); setDirty(false); setVerified(false); setActiveTab('write'); setLibraryOpen(false);
     slugEdited.current = false; notify('A new entry is ready. Give it a title and start writing.', 'hint');
+  };
+  const selectDeleted = (item) => {
+    if (!confirmLeave()) return;
+    setPost(item); setCover(null); setInlineFiles([]); setDirty(false); setVerified(false); setActiveTab('write'); setLibraryOpen(false);
+    notify(`${item.title} is in local trash. You can restore it${item.tracked ? ' or create a removal pull request' : ''}.`, 'hint');
   };
   const switchToSource = async () => {
     if (!sourceMode) { const markdown = editor.blocksToMarkdownLossy(editor.document); setEditorMarkdown(markdown); setSourceText(markdown); setSourceMode(true); }
@@ -161,6 +168,7 @@ function Studio() {
     notify('Image added to the page bundle. Save to see it in the Hugo preview.', 'info');
   };
   const save = async () => {
+    if (post.deleted) return notify('Restore this entry before editing it.', 'error');
     if (!post.title.trim() || !post.summary.trim() || !post.slug.trim()) return notify('Add a title, summary, and slug before saving.', 'error');
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(post.slug)) return notify('The slug can contain lowercase letters, numbers, and hyphens.', 'error');
     if (cover && !post.imageAlt.trim()) return notify('Add alternative text for the cover image.', 'error');
@@ -176,9 +184,31 @@ function Studio() {
       await refreshPosts(); notify('Saved locally. Open Preview to inspect the page, then verify the production build.', 'success');
     } catch (error) { fail(error); } finally { setBusy(''); }
   };
+  const deleteEntry = async () => {
+    if (!post.path || post.deleted || busy) return;
+    if (dirty && !window.confirm('Discard your unsaved editor changes and delete this entry?')) return;
+    if (window.prompt(`Type ${post.slug} to move this entry to local trash:`) !== post.slug) return;
+    try {
+      setBusy('Deleting');
+      const deleted = await api('/api/posts', { method: 'DELETE', body: JSON.stringify({ path: post.path }) });
+      setPost(deleted); setCover(null); setInlineFiles([]); setDirty(false); setVerified(false); setActiveTab('write');
+      await Promise.all([refreshPosts(), refreshDeleted()]);
+      notify(deleted.tracked ? 'Entry moved to local trash. Verify the site, then create a removal PR.' : 'Entry moved to local trash. You can restore it from the sidebar.', 'success');
+    } catch (error) { fail(error); } finally { setBusy(''); }
+  };
+  const restoreEntry = async () => {
+    if (!post.deleted || busy) return;
+    try {
+      setBusy('Restoring');
+      const restored = await api('/api/posts/restore', { method: 'POST', body: JSON.stringify({ trashId: post.trashId }) });
+      await installBody(restored.body);
+      setPost(restored); setDirty(false); setVerified(false); setActiveTab('write');
+      await Promise.all([refreshPosts(), refreshDeleted()]); notify('Entry restored.', 'success');
+    } catch (error) { fail(error); } finally { setBusy(''); }
+  };
   useEffect(() => {
     const onKeyDown = (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (!busy) save(); }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (!busy && !post.deleted) save(); }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -194,14 +224,14 @@ function Studio() {
     catch (error) { fail(error); } finally { setBusy(''); }
   };
   const merge = async () => {
-    try { setBusy('Merging'); const result = await api('/api/merge', { method: 'POST', body: JSON.stringify(post.pr) }); setPost((current) => ({ ...current, pr: null })); setVerified(false); notify(result.output, 'success'); await refreshPosts(); }
+    try { setBusy('Merging'); const result = await api('/api/merge', { method: 'POST', body: JSON.stringify({ ...post.pr, trashId: post.deleted ? post.trashId : undefined }) }); setPost((current) => current.deleted ? emptyPost() : { ...current, pr: null }); setVerified(false); notify(result.output, 'success'); await Promise.all([refreshPosts(), refreshDeleted()]); }
     catch (error) { fail(error); } finally { setBusy(''); }
   };
   const login = async () => { try { await api('/api/github/login', { method: 'POST', body: '{}' }); setLogOpen(true); notify('Follow the GitHub device instructions below to finish connecting.', 'info'); await refreshStatus(); } catch (error) { fail(error); } };
   const visiblePosts = posts.filter((item) => `${item.title} ${item.section}`.toLowerCase().includes(query.toLowerCase()));
-  const hasSaved = Boolean(post.path); const canVerify = hasSaved && !dirty && !busy;
+  const hasSaved = Boolean(post.path); const canVerify = hasSaved && !dirty && !busy && (!post.deleted || post.tracked);
   const canPublish = canVerify && verified && !post.pr && status?.github?.authenticated;
-  const preview = hasSaved && !dirty;
+  const preview = hasSaved && !dirty && !post.deleted;
   const stats = writingStats(sourceMode ? sourceText : editorMarkdown);
 
   return <div className={`studio-shell ${focusMode ? 'focus-mode' : ''}`}>
@@ -209,31 +239,34 @@ function Studio() {
       <div className="brand"><span className="brand-mark">M</span><div><strong>Murali’s Vault</strong><small>Writing studio</small></div></div>
       <button className="new-post" onClick={newPost}><span>＋</span> New entry</button>
       <button className="mobile-library-toggle" aria-expanded={libraryOpen} onClick={() => setLibraryOpen((open) => !open)}>Entries ({posts.length}) {libraryOpen ? '⌃' : '⌄'}</button>
-      <div className="library-heading"><span>Your entries <b>{posts.length}</b></span><button title="Refresh entries" aria-label="Refresh entries" onClick={() => refreshPosts().catch(fail)}>↻</button></div>
+      <div className="library-heading"><span>Your entries <b>{posts.length}</b></span><button title="Refresh entries" aria-label="Refresh entries" onClick={() => Promise.all([refreshPosts(), refreshDeleted()]).catch(fail)}>↻</button></div>
       <input className="library-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search entries…" aria-label="Search entries" />
       <nav className="library">{visiblePosts.length ? visiblePosts.map((item) => <button key={item.path} className={`library-item ${item.path === post.path ? 'selected' : ''}`} onClick={() => selectPost(item.path)}><strong>{item.title}</strong><span>{sections.find(([value]) => value === item.section)?.[1] || item.section} · {item.draft ? 'Draft' : 'Published'}</span></button>) : <p className="library-empty">{query ? 'No matching entries' : 'No entries yet'}</p>}</nav>
+      {deletedPosts.length > 0 && <div className="deleted-library"><div className="library-heading">Local trash <b>{deletedPosts.length}</b></div>{deletedPosts.map((item) => <button key={item.trashId} className={`library-item deleted-item ${item.trashId === post.trashId ? 'selected' : ''}`} onClick={() => selectDeleted(item)}><strong>{item.title}</strong><span>{item.tracked ? 'Pending removal PR' : 'Local entry'} · Restore available</span></button>)}</div>}
       <div className="sidebar-footer"><div className="connection"><span className={`dot ${status?.github?.authenticated ? 'connected' : ''}`} /><span>{status?.github?.authenticated ? status.github.account : status?.github?.running ? 'Connecting…' : 'GitHub disconnected'}</span></div><button className="connect" onClick={login} disabled={status?.github?.running}>{status?.github?.authenticated ? 'Reconnect GitHub' : 'Connect GitHub'} →</button></div>
     </aside>
     <main className="workspace">
-      <header className="topbar"><div className="topbar-title">Blog Studio <span>/</span> {hasSaved ? post.title : 'New entry'}</div><div className="topbar-tools"><button className="focus-toggle" onClick={() => setFocusMode((value) => !value)} aria-pressed={focusMode}>{focusMode ? 'Exit focus' : 'Focus mode'}</button><div className="topbar-status"><span className={`save-dot ${dirty ? 'unsaved' : !hasSaved ? 'empty' : ''}`} />{dirty ? 'Unsaved changes' : hasSaved ? 'Saved locally' : 'Not saved yet'}</div></div></header>
+      <header className="topbar"><div className="topbar-title">Blog Studio <span>/</span> {hasSaved ? post.title : 'New entry'}</div><div className="topbar-tools"><button className="focus-toggle" onClick={() => setFocusMode((value) => !value)} aria-pressed={focusMode}>{focusMode ? 'Exit focus' : 'Focus mode'}</button><div className="topbar-status"><span className={`save-dot ${dirty ? 'unsaved' : !hasSaved ? 'empty' : ''}`} />{post.deleted ? 'In local trash' : dirty ? 'Unsaved changes' : hasSaved ? 'Saved locally' : 'Not saved yet'}</div></div></header>
       <div className="workspace-inner">
         {!status?.ready && status && <div className="setup-note"><strong>Publishing setup</strong><span>{status.problems.join(' · ')}</span>{!status.github?.authenticated && <button onClick={login}>Connect GitHub</button>}</div>}
-        <div className="page-heading"><div><p className="eyebrow">{hasSaved ? (post.draft ? 'DRAFT ENTRY' : 'PUBLISHABLE ENTRY') : 'NEW ENTRY'}</p><h1>{post.title || 'Create an entry'}</h1><p>Write, preview, verify, and send your story for publication.</p></div><button className="preview-link" onClick={() => setActiveTab('preview')} disabled={!preview}>Preview page ↗</button></div>
+        <div className="page-heading"><div><p className="eyebrow">{post.deleted ? 'LOCAL TRASH' : hasSaved ? (post.draft ? 'DRAFT ENTRY' : 'PUBLISHABLE ENTRY') : 'NEW ENTRY'}</p><h1>{post.title || 'Create an entry'}</h1><p>{post.deleted ? 'Restore this entry or finish removing it through a pull request.' : 'Write, preview, verify, and send your story for publication.'}</p></div><button className="preview-link" onClick={() => setActiveTab('preview')} disabled={!preview}>Preview page ↗</button></div>
         <div className={`message ${message.type}`} role="status">{message.text}</div>
-        <div className="studio-grid">
+        <div className={`studio-grid ${post.deleted ? 'is-deleted' : ''}`}>
           <section className="composer" aria-label="Entry editor">
+            {post.deleted ? <div className="deleted-pane"><span className="deleted-icon">↺</span><h2>Moved to local trash</h2><p>{post.tracked ? 'The entry and its images have been removed locally. Verify the site, then create a pull request to remove them from GitHub.' : 'This entry was only local. Restore it to keep working on it.'}</p><button onClick={restoreEntry} disabled={Boolean(busy) || Boolean(post.pr)}>Restore entry</button></div> : <>
             <div className="entry-fields"><label>Title<input autoFocus value={post.title} onChange={(event) => setTitle(event.target.value)} placeholder="Give this story a title" /></label><label>Summary<textarea value={post.summary} onChange={(event) => setField('summary', event.target.value)} placeholder="One or two sentences for the homepage and search results" maxLength={260} /></label><small>{post.summary.length}/260 characters</small></div>
             <div className="editor-tabs" role="tablist" aria-label="Editor view"><button role="tab" aria-selected={activeTab === 'write'} onClick={switchToWrite}>Write</button><button role="tab" aria-selected={activeTab === 'preview'} disabled={!preview} onClick={() => setActiveTab('preview')}>Preview</button><button role="tab" aria-selected={activeTab === 'source'} onClick={switchToSource}>Markdown</button></div>
             {activeTab === 'write' && !sourceMode && <div className="format-toolbar" role="toolbar" aria-label="Text formatting" onMouseDown={(event) => { if (event.target.closest('button')) event.preventDefault(); }}><div className="toolbar-group"><button title="Paragraph" aria-label="Paragraph" onClick={() => formatBlock('paragraph')}>Text</button><button title="Heading 2" aria-label="Heading 2" onClick={() => formatBlock('heading', { level: 2 })}>H2</button><button title="Heading 3" aria-label="Heading 3" onClick={() => formatBlock('heading', { level: 3 })}>H3</button></div><span className="toolbar-divider" /><div className="toolbar-group"><button title="Bold" aria-label="Bold" onClick={() => toggleStyle('bold')}><b>B</b></button><button title="Italic" aria-label="Italic" onClick={() => toggleStyle('italic')}><i>I</i></button><button title="Strikethrough" aria-label="Strikethrough" onClick={() => toggleStyle('strike')}><s>S</s></button><button title="Inline code" aria-label="Inline code" onClick={() => toggleStyle('code')}><code>&lt;/&gt;</code></button><button title="Insert link" aria-label="Insert link" onClick={addLink}>Link</button></div><span className="toolbar-divider" /><div className="toolbar-group"><button title="Bulleted list" onClick={() => formatBlock('bulletListItem')}>• List</button><button title="Numbered list" onClick={() => formatBlock('numberedListItem')}>1. List</button><button title="Quote" onClick={() => formatBlock('quote')}>“ Quote</button></div><span className="toolbar-spacer" /><div className="toolbar-group"><button title="Undo" aria-label="Undo" onClick={() => editor.undo()}>↶</button><button title="Redo" aria-label="Redo" onClick={() => editor.redo()}>↷</button></div></div>}
             <div className="editor-content">{activeTab === 'preview' ? <div className="preview-pane"><div className="preview-bar"><span>{previewUrl(post)}</span><a href={previewUrl(post)} target="_blank" rel="noreferrer">Open in new tab ↗</a></div><iframe title="Hugo page preview" src={previewUrl(post)} /></div> : activeTab === 'source' || sourceMode ? <div className="source-pane"><p>Hugo embeds stay intact in Markdown. Save to render them in the page preview.</p><textarea aria-label="Article Markdown" value={sourceText} onChange={(event) => { setSourceText(event.target.value); markDirty(); }} spellCheck="false" /></div> : <div className="rich-editor"><div className="rich-tip">Type <kbd>/</kbd> for blocks, or select text to format it.</div><BlockNoteView editor={editor} theme="light" onChange={() => { if (!loadingEditor.current) { setEditorMarkdown(editor.blocksToMarkdownLossy(editor.document)); markDirty(); } }} /></div>}</div>
             <div className="composer-footer"><span>{stats.words} {stats.words === 1 ? 'word' : 'words'} · {stats.minutes} min read <span className="footer-hint">· {sourceMode ? 'Markdown with Hugo embeds' : 'Ctrl/⌘ + S to save'}</span></span><div><label className="small-upload">＋ Add image<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { addInlineImage(event.target.files?.[0]); event.target.value = ''; }} /></label><button onClick={() => insertEmbed('youtube')}>＋ YouTube</button><button onClick={() => insertEmbed('video')}>＋ Video</button></div></div>
+            </>}
           </section>
-          <aside className="inspector" aria-label="Entry settings"><section><div className="panel-heading"><h2>Entry settings</h2><span>01</span></div><label>Section<select value={post.section} disabled={hasSaved} onChange={(event) => setField('section', event.target.value)}>{sections.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>URL slug<input value={post.slug} disabled={hasSaved} onChange={(event) => { slugEdited.current = true; setField('slug', event.target.value); }} placeholder="story-url" /></label><label>Date<input type="date" value={post.date} onChange={(event) => setField('date', event.target.value)} /></label><label className="check-row"><input type="checkbox" checked={post.draft} onChange={(event) => setField('draft', event.target.checked)} /><span><strong>Keep as draft</strong><small>It stays hidden after merge</small></span></label></section>
+          {!post.deleted && <aside className="inspector" aria-label="Entry settings"><section><div className="panel-heading"><h2>Entry settings</h2><span>01</span></div><label>Section<select value={post.section} disabled={hasSaved} onChange={(event) => setField('section', event.target.value)}>{sections.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>URL slug<input value={post.slug} disabled={hasSaved} onChange={(event) => { slugEdited.current = true; setField('slug', event.target.value); }} placeholder="story-url" /></label><label>Date<input type="date" value={post.date} onChange={(event) => setField('date', event.target.value)} /></label><label className="check-row"><input type="checkbox" checked={post.draft} onChange={(event) => setField('draft', event.target.checked)} /><span><strong>Keep as draft</strong><small>It stays hidden after merge</small></span></label></section>
             <section><div className="panel-heading"><h2>Cover image</h2><span>02</span></div>{coverPreview && <img className="cover-preview" src={coverPreview} alt="Selected cover preview" />}<label className="cover-upload"><span>＋ Choose JPEG, PNG or WebP</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { setCover(event.target.files?.[0] || null); markDirty(); }} /></label>{(cover || post.image) && <p className="image-name">{cover?.name || post.image}</p>}<label>Image description<input value={post.imageAlt || ''} onChange={(event) => setField('imageAlt', event.target.value)} placeholder="Describe what the image shows" /></label><label>Caption <span className="optional">optional</span><input value={post.imageCaption || ''} onChange={(event) => setField('imageCaption', event.target.value)} placeholder="Credit or context" /></label></section>
             <section className="workflow-card"><div className="panel-heading"><h2>Publish workflow</h2><span>03</span></div><ol><li className={hasSaved && !dirty ? 'done' : ''}>Save the entry</li><li className={verified && !dirty ? 'done' : ''}>Verify the site</li><li className={post.pr ? 'done' : ''}>Review the pull request</li></ol>{post.pr && <a href={post.pr.url} target="_blank" rel="noreferrer">Open PR #{post.pr.number} ↗</a>}</section>
-          </aside>
+          </aside>}
         </div>
-        <div className="action-bar"><div className="action-context">{busy ? `${busy}…` : dirty ? 'Save changes before preview or verification' : post.pr ? `Pull request #${post.pr.number} is open` : verified ? 'Production checks passed' : hasSaved ? 'Saved locally; verify when ready' : 'Your entry starts locally'}</div><div className="action-buttons"><button className="primary" onClick={save} disabled={Boolean(busy)}>{busy === 'Saving' ? 'Saving…' : dirty || !hasSaved ? 'Save entry' : 'Save again'}</button><button onClick={validate} disabled={!canVerify}>Verify</button><button onClick={publish} disabled={!canPublish}>Create PR</button><button onClick={merge} disabled={!post.pr || Boolean(busy)}>Merge PR</button></div></div>
+        <div className="action-bar"><div className="action-context">{busy ? `${busy}…` : post.pr ? `Pull request #${post.pr.number} is open` : post.deleted ? post.tracked ? 'Entry removed locally; create a PR to remove it from GitHub' : 'Local entry is in trash' : dirty ? 'Save changes before preview or verification' : verified ? 'Production checks passed' : hasSaved ? 'Saved locally; verify when ready' : 'Your entry starts locally'}</div><div className="action-buttons">{post.deleted ? <button className="primary" onClick={restoreEntry} disabled={Boolean(busy) || Boolean(post.pr)}>Restore entry</button> : <button className="primary" onClick={save} disabled={Boolean(busy)}>{busy === 'Saving' ? 'Saving…' : dirty || !hasSaved ? 'Save entry' : 'Save again'}</button>}{!post.deleted && hasSaved && <button className="danger" onClick={deleteEntry} disabled={Boolean(busy) || Boolean(post.pr)}>Delete entry</button>}{(!post.deleted || post.tracked) && <><button onClick={validate} disabled={!canVerify}>Verify</button><button onClick={publish} disabled={!canPublish}>{post.deleted ? 'Create removal PR' : 'Create PR'}</button><button onClick={merge} disabled={!post.pr || Boolean(busy)}>Merge PR</button></>}</div></div>
         {logOpen && <section className="activity"><div><h2>Activity</h2><button onClick={() => setLogOpen(false)}>Hide</button></div><pre>{log || 'Waiting for GitHub…'}</pre></section>}{!logOpen && log && <button className="show-activity" onClick={() => setLogOpen(true)}>Show activity log</button>}
       </div>
     </main>

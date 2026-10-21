@@ -32,24 +32,22 @@ The About biography can be added as Markdown in `content/about/_index.md`. Set `
 
 ## Blog Studio (local editor)
 
-Blog Studio is a local-only writing interface for new and existing journal entries. It writes the same Hugo page bundles used by this repository, previews them with Hugo, runs the production checks, and can create and merge a GitHub pull request through the locally authenticated GitHub CLI. Use the Write tab for rich text and its formatting toolbar, Markdown for Hugo embeds, and Preview after saving to inspect the rendered page. Focus mode gives the editor more room; the footer shows word count and estimated reading time. Press Ctrl/⌘ + S to save. The Studio warns before leaving an entry with unsaved changes.
-
-Run the Studio from the repository root:
+Run the local writing studio from the repository root:
 
 ```sh
 npm run blog-studio
 ```
 
-The first launch installs the Studio's dependencies and downloads a checksum-verified Hugo Extended 0.167.0 into the Studio's private runtime folder; it does not use or change your system Hugo installation. Open `http://127.0.0.1:4174`, then select **Connect GitHub** in the Studio when you are ready to publish. It starts GitHub CLI's browser/device authorization flow and keeps the credential in GitHub CLI's credential store, never in the browser. The Hugo preview runs at `http://127.0.0.1:1313`. It is deliberately bound to localhost.
+Open **http://127.0.0.1:4174** and work in the browser. The first run installs the Studio dependencies and its own Hugo Extended 0.167.0. See the [Blog Studio guide](tools/blog-studio/README.md) for requirements and the save, preview, and publishing steps.
 
 ## Check and publish
 
 ```sh
-hugo --gc --minify --panicOnWarning
+hugo --gc --minify --panicOnWarning --cleanDestinationDir
 python3 scripts/check_site.py public
 ```
 
-For a clean build after deleting or renaming content, add `--cleanDestinationDir` (this replaces the generated `public/` output only). Do not check generated files into Git.
+The build clears the generated `public/` folder first, so earlier draft previews cannot affect the check. Do not check generated files into Git.
 
 Open a pull request. GitHub Actions builds and checks the production output on pull requests. After review and merge to `main`, the workflow builds again and deploys to GitHub Pages. In repository **Settings → Pages**, the build source must be **GitHub Actions** and the custom domain must be **muralisvault.in**. Keep Hugo's `baseURL` aligned with that domain so assets and navigation resolve from the site root. The `github-pages` environment is used for deployments. No secrets are required.
 

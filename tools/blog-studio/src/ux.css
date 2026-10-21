@@ -11,6 +11,17 @@
 .format-toolbar code{font-size:11px}
 .toolbar-divider{width:1px;height:20px;margin:0 5px;background:#dbe4e9}
 .cover-preview{display:block;width:100%;max-height:180px;margin-bottom:12px;object-fit:cover;border-radius:7px;border:1px solid #e0e7eb}
+.deleted-library{max-height:170px;overflow:auto;border-top:1px solid #395064;padding-top:2px}
+.deleted-library .library-heading{margin-top:12px}
+.deleted-item{opacity:.8}
+.studio-grid.is-deleted{grid-template-columns:minmax(0,1fr)}
+.deleted-pane{min-height:330px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:45px 25px;text-align:center}
+.deleted-icon{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;background:#eef3f6;color:#365a70;font-size:28px}
+.deleted-pane h2{margin:18px 0 4px;color:#22394d;font:700 24px Georgia,serif}
+.deleted-pane p{max-width:470px;color:#687d8d;font-size:13px;line-height:1.6}
+.deleted-pane button{margin-top:8px;border:1px solid #bcced8;border-radius:6px;background:#fff;color:#31546c;padding:9px 14px;font-size:12px;font-weight:750}
+.action-buttons button.danger{border-color:#e9cbc8;color:#a4443c}
+.action-buttons button.danger:hover{background:#fff2f0}
 .focus-mode{grid-template-columns:minmax(0,1fr)}
 .focus-mode .sidebar,.focus-mode .inspector,.focus-mode .setup-note,.focus-mode .workflow-card{display:none}
 .focus-mode .workspace-inner{max-width:960px}
@@ -25,6 +36,8 @@
   .sidebar.library-open .library-heading{display:flex;margin-top:18px}
   .sidebar.library-open .library-search{display:block}
   .sidebar.library-open .library{display:flex;max-height:150px;margin-bottom:0}
+  .sidebar .deleted-library{display:none}
+  .sidebar.library-open .deleted-library{display:block;max-height:120px}
   .sidebar-footer{position:static;margin-top:13px;padding-top:10px;border-top:1px solid #395064}
   .format-toolbar{padding:8px 14px}
 }

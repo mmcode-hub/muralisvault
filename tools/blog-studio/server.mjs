@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
-import { createReadStream, existsSync, readFileSync, rmSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, rmSync, mkdirSync, readdirSync, statSync, writeFileSync, renameSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, relative, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +9,7 @@ const toolDir = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const repoDir = resolve(toolDir, '../..');
 const distDir = join(toolDir, 'dist');
 const contentDir = join(repoDir, 'content');
+const trashDir = join(toolDir, '.runtime', 'trash');
 const requiredHugo = '0.167.0';
 const hugoBin = process.env.BLOG_STUDIO_HUGO || 'hugo';
 const host = '127.0.0.1';
@@ -47,7 +49,6 @@ function parseDataUrl(value) {
 }
 function validAssetName(name) { return typeof name === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:jpe?g|png|webp)$/i.test(name); }
 function safeBundlePath(section, slug) { const result = resolve(postPath(section, slug), '..'); if (!pathInside(contentDir, result)) throw new Error('Post path escapes content directory.'); return result; }
-function gitLines() { return commandText('git', ['status', '--porcelain=v1']).output.split('\n').filter(Boolean); }
 function branchName(date, slug) { return `blog/${date}-${slug}`; }
 
 function status() {
@@ -84,6 +85,46 @@ function listPosts() {
   };
   walk(contentDir);
   return found.sort((left, right) => right.date.localeCompare(left.date));
+}
+
+function trashRecord(id) {
+  if (!/^[0-9a-f-]{36}$/.test(id || '')) throw new Error('Invalid deleted entry.');
+  const folder = join(trashDir, id);
+  const record = JSON.parse(readFileSync(join(folder, 'record.json'), 'utf8'));
+  if (relative(repoDir, safeBundlePath(record.post.section, record.post.slug)) !== record.post.bundle) throw new Error('Invalid deleted entry path.');
+  return { ...record, id, folder };
+}
+
+function listDeleted() {
+  if (!existsSync(trashDir)) return [];
+  return readdirSync(trashDir).flatMap((id) => {
+    try { const { post, tracked, deletedAt } = trashRecord(id); return [{ ...post, tracked, deletedAt, trashId: id, deleted: true }]; }
+    catch { return []; }
+  }).sort((left, right) => right.deletedAt.localeCompare(left.deletedAt));
+}
+
+function deletePost(pathname) {
+  const post = readPost(pathname);
+  const bundle = safeBundlePath(post.section, post.slug);
+  const tracked = commandText('git', ['ls-files', '--error-unmatch', '--', post.path]).ok;
+  const id = randomUUID();
+  const folder = join(trashDir, id);
+  mkdirSync(folder, { recursive: true });
+  try {
+    writeFileSync(join(folder, 'record.json'), JSON.stringify({ post, tracked, deletedAt: new Date().toISOString() }));
+    renameSync(bundle, join(folder, 'bundle'));
+  } catch (error) { rmSync(folder, { recursive: true, force: true }); throw error; }
+  return { ...post, tracked, trashId: id, deleted: true };
+}
+
+function restorePost(id) {
+  const { post, folder } = trashRecord(id);
+  const bundle = safeBundlePath(post.section, post.slug);
+  if (existsSync(bundle)) throw new Error('An entry already exists at this path.');
+  mkdirSync(resolve(bundle, '..'), { recursive: true });
+  renameSync(join(folder, 'bundle'), bundle);
+  rmSync(folder, { recursive: true, force: true });
+  return readPost(post.path);
 }
 
 function beginGithubLogin() {
@@ -139,46 +180,50 @@ async function savePost(payload) {
 
 async function validate() {
   if (!isHugoReady()) throw new Error(`Hugo ${requiredHugo} is required; current version is ${commandText(hugoBin, ['version']).output || 'not installed'}.`);
-  const build = await run(hugoBin, ['--gc', '--minify', '--panicOnWarning']);
+  const build = await run(hugoBin, ['--gc', '--minify', '--panicOnWarning', '--cleanDestinationDir']);
   const check = await run('python3', ['scripts/check_site.py', 'public']);
   return `${build.stdout}${build.stderr}${check.stdout}${check.stderr}`.trim() || 'Hugo build and site checks passed.';
 }
 
 function assertOnlyBundleChanged(bundle) {
   const prefix = `${bundle.replaceAll('\\', '/')}/`;
-  const unrelated = gitLines().filter((line) => {
-    const file = line.slice(3).split(' -> ').at(-1).replaceAll('\\', '/');
-    return !file.startsWith(prefix);
-  });
-  if (unrelated.length) throw new Error(`Refusing to publish while unrelated changes exist: ${unrelated.join(', ')}`);
+  const staged = commandText('git', ['diff', '--cached', '--name-only']).output.split('\n').filter(Boolean);
+  const unrelated = staged.filter((file) => !file.replaceAll('\\', '/').startsWith(prefix));
+  if (unrelated.length) throw new Error(`Refusing to publish while unrelated changes are staged: ${unrelated.join(', ')}`);
 }
 
-async function publish({ bundle, slug, date }) {
+async function publish({ bundle, section, slug, date }) {
   if (!bundle || !validSlug(slug) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Saved post information is incomplete.');
+  if (relative(repoDir, safeBundlePath(section, slug)) !== bundle) throw new Error('Saved post path is invalid.');
   if (commandText('git', ['branch', '--show-current']).output !== 'main') throw new Error('Switch to main before creating a pull request.');
   if (!commandText('gh', ['api', 'user']).ok) throw new Error('Run gh auth login before publishing.');
+  const deleting = !existsSync(join(repoDir, bundle));
+  const tracked = commandText('git', ['ls-files', '--error-unmatch', '--', join(bundle, 'index.md')]).ok;
+  if (deleting && !tracked) throw new Error('Only tracked entries can be removed through a pull request.');
   assertOnlyBundleChanged(bundle);
   await validate();
   const branch = branchName(date, slug);
   if (commandText('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]).ok) throw new Error(`Local branch ${branch} already exists.`);
   await run('git', ['switch', '-c', branch]);
   await run('git', ['add', '--', bundle]);
-  await run('git', ['commit', '-m', `Add ${slug}`]);
+  const action = deleting ? 'Remove' : tracked ? 'Update' : 'Add';
+  await run('git', ['commit', '-m', `${action} ${slug}`]);
   await run('git', ['push', '--set-upstream', 'origin', branch]);
-  const pr = await run('gh', ['pr', 'create', '--base', 'main', '--head', branch, '--title', `Add ${slug}`, '--body', `Created with Blog Studio.\n\n${bundle}`]);
+  const pr = await run('gh', ['pr', 'create', '--base', 'main', '--head', branch, '--title', `${action} ${slug}`, '--body', `Created with Blog Studio.\n\n${bundle}`]);
   const url = pr.stdout.trim();
   const numberMatch = /pull\/(\d+)/.exec(url);
   if (!numberMatch) throw new Error(`Pull request was created but its number could not be read: ${url}`);
   return { number: Number(numberMatch[1]), url, branch };
 }
 
-async function merge({ number }) {
+async function merge({ number, trashId }) {
   if (!Number.isInteger(number)) throw new Error('Invalid pull request number.');
   const checks = await run('gh', ['pr', 'checks', String(number)]);
   if (!checks.stdout.trim()) throw new Error('GitHub has not reported required checks yet.');
   await run('gh', ['pr', 'merge', String(number), '--squash', '--delete-branch']);
   await run('git', ['switch', 'main']);
   await run('git', ['pull', '--ff-only']);
+  if (trashId) { try { const { folder } = trashRecord(trashId); rmSync(folder, { recursive: true, force: true }); } catch { /* The pull request has already merged. */ } }
   return `Merged PR #${number} and updated local main.`;
 }
 
@@ -188,7 +233,10 @@ const server = createServer(async (request, response) => {
     const url = new URL(request.url, `http://${host}:${port}`);
     if (request.method === 'GET' && url.pathname === '/api/status') return send(response, 200, status());
     if (request.method === 'GET' && url.pathname === '/api/posts') return send(response, 200, { posts: url.searchParams.get('path') ? [readPost(url.searchParams.get('path'))] : listPosts() });
+    if (request.method === 'GET' && url.pathname === '/api/deleted') return send(response, 200, { posts: listDeleted() });
     if (request.method === 'POST' && url.pathname === '/api/posts') return send(response, 201, await savePost(await readJson(request)));
+    if (request.method === 'DELETE' && url.pathname === '/api/posts') return send(response, 200, deletePost((await readJson(request)).path));
+    if (request.method === 'POST' && url.pathname === '/api/posts/restore') return send(response, 200, restorePost((await readJson(request)).trashId));
     if (request.method === 'POST' && url.pathname === '/api/github/login') return send(response, 202, beginGithubLogin());
     if (request.method === 'POST' && url.pathname === '/api/validate') return send(response, 200, { output: await validate() });
     if (request.method === 'POST' && url.pathname === '/api/publish') return send(response, 200, { pr: await publish(await readJson(request)) });
